@@ -77,7 +77,7 @@ combos.register_var("symbiont__COPY_OVER")
 combos.register_var("cycle_prop__COPY_OVER")
 combos.register_var("interaction_multiplier__COPY_OVER")
 combos.register_var("task_credit__COPY_OVER")
-combos.register_var("TASK_ENV_CFG_PATH")
+combos.register_var("EVENTS_CFG_PATH")
 
 combos.add_val(
     "symbiont__COPY_OVER",
@@ -107,7 +107,7 @@ combos.add_val(
 )
 
 combos.add_val(
-    "TASK_ENV_CFG_PATH",
+    "EVENTS_CFG_PATH",
     [
         "events-constant.json",
         "events-fluctuating-25.json",
