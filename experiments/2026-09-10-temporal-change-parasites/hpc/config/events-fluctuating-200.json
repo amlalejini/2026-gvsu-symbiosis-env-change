@@ -3,7 +3,7 @@
     {
       "event_type": "task_value",
       "task_name": [
-        "NAND", "OR_NOT", "AND_NOT", "NOR"
+        "NAND", "OR_NOT", "AND_NOT", "XOR"
       ],
       "action": "mult",
       "value": 1,
@@ -13,7 +13,7 @@
     {
       "event_type": "task_value",
       "task_name": [
-        "NOT", "AND", "OR", "XOR"
+        "NOT", "AND", "OR", "NOR"
       ],
       "action": "mult",
       "value": -1,
@@ -23,8 +23,8 @@
     {
       "event_type": "task_value",
       "task_name": [
-        "NAND", "OR_NOT", "AND_NOT", "NOR",
-        "NOT", "AND", "OR", "XOR"
+        "NAND", "OR_NOT", "AND_NOT", "XOR",
+        "NOT", "AND", "OR", "NOR"
       ],
       "action": "mult",
       "value": -1,
