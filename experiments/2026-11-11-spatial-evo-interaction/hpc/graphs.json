@@ -1,0 +1,74 @@
+{
+  "graphs-to-generate": [
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 2500,
+        "detour_length": 7500,
+        "detour_width": 1,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm2500_d7500x1",
+      "output_node_info": true
+    },
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 2500,
+        "detour_length": 1875,
+        "detour_width": 4,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm2500_d1875x4",
+      "output_node_info": true
+    },
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 5000,
+        "detour_length": 5000,
+        "detour_width": 1,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm5000_d5000x1",
+      "output_node_info": true
+    },
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 5000,
+        "detour_length": 1250,
+        "detour_width": 4,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm5000_d1250x4",
+      "output_node_info": true
+    },
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 7500,
+        "detour_length": 2500,
+        "detour_width": 1,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm7500_d2500x1",
+      "output_node_info": true
+    },
+    {
+      "graph": "detour",
+      "params": {
+        "clique_size": 7500,
+        "detour_length": 625,
+        "detour_width": 4,
+        "asymmetric_connections": 1
+      },
+      "output_id": "detour_wm7500_d625x4",
+      "output_node_info": true
+    },
+    {
+      "graph": "cycle",
+      "params": {"nodes": 10000}
+    }
+  ]
+}
