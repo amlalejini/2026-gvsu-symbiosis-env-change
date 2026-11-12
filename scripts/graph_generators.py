@@ -57,11 +57,11 @@ def gen_graph_toroidal_lattice(graph_width:int, graph_height:int):
     return graph
 
 def gen_graph_comet_kite(
-        core_size:int,
-        num_tails:int,
-        additional_tail_nodes:int = 0,
-        seed:int = 1
-    ):
+    core_size:int,
+    num_tails:int,
+    additional_tail_nodes:int = 0,
+    seed:int = 1
+):
     """
     Function generates a comet-kite graph.
 
@@ -225,8 +225,8 @@ def gen_graph_random_geometric(nodes:int, radius:float, dimension:int, seed:int)
     return graph
 
 def gen_graph_barbell(
-      clique_size:int,
-      chain_size:int
+    clique_size:int,
+    chain_size:int
 ):
     '''
     Function generates a barbell graph (https://networkx.org/documentation/stable/reference/generated/networkx.generators.classic.barbell_graph.html)
@@ -336,11 +336,11 @@ def gen_graph_clique_ring(
     return graph
 
 def _build_clique_ring_internal(
-        clique_size: int,
-        clique_count: int,
-        nodes_between_cliques: int = 0,
-        start_id: int = 0
-    ):
+    clique_size: int,
+    clique_count: int,
+    nodes_between_cliques: int = 0,
+    start_id: int = 0
+):
     '''
     helper function for gen_graph_hierarhical_clique_ring
     '''
@@ -667,52 +667,106 @@ def gen_graph_ring_k_regular(nodes:int, k:int, return_nxGraph:bool = True):
         graph = {"nodes": list_nodes, "edges": list_edges}
     return graph
 
-# def gen_graph_hierarchical_k_regular(layers:int, k:int, layer_size:int, connection_path_size:int):
-#     graph = nx.Graph()
-#     if layers == 0:
-#         return gen_graph_ring_k_regular(layer_size,k,False)
-#     else:
-#         #generate k-regular
-#         # repalce each node with one smaller layer k-reg
-#         #
+def gen_graph_detour(
+    clique_size:int,
+    detour_length:int,
+    detour_width:int = 1,
+    asymmetric_connections:bool = False
+):
+    '''
+    Purpose: Generates a detour graph with asymetric connections.
+    Input:
+        - clique_size: Number of nodes in the clique
+        - detour_length: Length of the detour path (defines minimum steps from
+            one end of detour to other)
+        - detour_width: Width of the detour path. Width of one is a linear chain.
+            Increasing the width turns the detour in to a "straw" structure.
+    Output:
+        - networkx DiGraph
+    '''
+    graph = nx.DiGraph()
+    # -- Add clique nodes and edges --
+    # clique_node_range = (0, clique_size - 1)
+    clique_nodes = [i for i in range(clique_size)]
+    graph.add_nodes_from(clique_nodes, region = "clique", connection_point = False)
+    # Directed graph, so need to add both j => i and i => j (but never i => i)
+    graph.add_edges_from([(j, i) for i in range(clique_size) for j in range(clique_size) if i != j])
+    # -- Build detour as a "straw" --
+    # Create grid to use to figure out edges
+    # detour_size = detour_length * detour_width
+    detour_grid = [[None for c in range(detour_width)] for r in range(detour_length)]
+    # Assign vertex ids to each position in grid
+    id = 0
+    for r in range(detour_length):
+        for c in range(detour_width):
+            detour_grid[r][c] = id + clique_size # Slide ids past clique ids
+            graph.add_node(detour_grid[r][c], region = "detour", connection_point = False)
+            # Add connector attributes
+            if r == 0 or r == detour_length - 1:
+                graph.nodes[detour_grid[r][c]]["connection_point"] = True
+            id += 1
 
-#         #toplayer = k-regular graph
-#         toplayer = gen_graph_ring_k_regular(layer_size,k,False)
-#         #every node becomes lower layer k-regular
-#         for node in toplayer["nodes"]:
-#             toplayer["nodes"][node] = gen_graph_hierarchical_k_regular(layers -1, k, layer_size, connection_path_size)["nodes"]
+    # Compute edges for detour straw structure
+    for r in range(detour_length):
+        for c in range(detour_width):
+            edges = []
+            id = detour_grid[r][c]
+            up = detour_grid[r-1][c]
+            down = detour_grid[(r+1) % detour_length][c]
+            right = detour_grid[r][(c+1) % detour_width]
+            left = detour_grid[r][c-1]
+            # Always wrap around width
+            edges.extend([(id, right), (right, id), (id, left), (left, id)])
+            # Don't wrap around height
+            if r == 0:
+                # Top row, don't connect up
+                edges.extend([(id, down), (down, id)])
+            elif r == detour_length - 1:
+                # Bottom row, don't connect down
+                edges.extend([(id, up), (up, id)])
+            else:
+                # Middle row, connect both up and down
+                edges.extend([(id, up), (up, id), (id, down), (down, id)])
 
-# #TODO rename nodes
-#         for subList in toplayer["ndoes"]:
-#             for node in sublist
+            for edge in edges:
+                # Don't add self-edges
+                # Don't add redundant edges
+                self_edge = edge[0] == edge[1]
+                redundant = edge in graph.edges
+                if not self_edge and not redundant:
+                    graph.add_edges_from([edge])
 
-#         for edge in toplayer["edges"]:
-#             endpoint1 = random.choice(toplayer["nodes"][edge[0]])
-#             endpoint2 = random.choice(toplayer["nodes"][edge[1]])
-#             if connection_path_size == 0:
-#                 toplayer["edges"][edge] = (endpoint1, endpoint2)
-#             else:
-#                 #TODO ?? ensure that connecting-cahin-nodes are not selected for future endpoints
-#                 #create connection chains
-#                 #this wont work but I think this is the gist
-#                 for i in range(1, connection_path_size):
-#                     toplayer["nodes"].append(toplayer["nodes"][-1][-1] + i)
-#                     toplayer["edges"].append((endpoint1,toplayer["nodes"][-1][-1]))
-#                 toplayer["edges"].append((toplayer["nodes"][-1][-1],endpoint2))
+    # Connect ends of detour to vertices in clique
+    detour_top_nodes = set(detour_grid[0])
+    # detour_bottom_nodes = set(detour_grid[-1])
+    detour_conn_nodes = detour_grid[0] + detour_grid[-1]
+    # Connect top nodes to early nodes in clique
+    for i in range(len(detour_conn_nodes)):
+        detour_conn_node = detour_conn_nodes[i]
+        top_node = detour_conn_node in detour_top_nodes
+        if top_node:
+            # If top, connect to lower clique node ids
+            clique_connection_node = clique_nodes[i % len(clique_nodes)]
+        else:
+            # If bottom, connect to upper clique node ids
+            clique_connection_node = clique_nodes[((len(clique_nodes) - 1) - (i - len(detour_top_nodes))) % len(clique_nodes)]
 
+        # Mark clique node as a connection point
+        graph.nodes[clique_connection_node]["connection_point"] = True
 
-#     # graph.add_nodes_from(toplayer["nodes"])
-#     # graph.add_edges_from(toplayer["edges"])
-#     #print(graph)
-#     print(toplayer)
-#     # nx.draw(
-#     #         graph,
-#     #         pos = nx.spring_layout(graph, iterations=10000),
-#     #         with_labels = True,
-#     #     )
-#     # plt.show()
+        # (1) Add connection from clique node to detour node
+        graph.add_edge(clique_connection_node, detour_conn_node)
+        # (2) Add connection from detour to clique
+        if asymmetric_connections:
+            # Add connection from detour node to all clique nodes
+            graph.add_edges_from([(detour_conn_node, cn) for cn in clique_nodes])
+        else:
+            # Add connection from detour node to single clique node
+            graph.add_edge(detour_conn_node, clique_connection_node)
 
-# #     return graph
+    # print(graph.nodes(data = True))
+    # print(graph.edges)
+    return graph
 
 
 def add_random_nodes(graph:nx.Graph, new_size:int, seed:Optional[int] = None):
@@ -766,19 +820,12 @@ _graph_generators = {
     #"regular-island": gen_graph_regular_island,
     "star-like": gen_graph_star_like,
     "probabilistic-star-like": gen_graph_probabilistic_star_like,
-    "ring-k-regular": gen_graph_ring_k_regular
-
+    "ring-k-regular": gen_graph_ring_k_regular,
+    "detour": gen_graph_detour
 }
 
 def get_generator_fun(name:str):
     return _graph_generators[name]
-
-# g = gen_graph_hierarchical_clique_ring(
-#     layers = 2,
-#     clique_size = 5,
-#     community_count= 3,
-#     nodes_between_communities = 4
-# )
 
 
 # nx.draw(
@@ -788,9 +835,9 @@ def get_generator_fun(name:str):
     # )
     # plt.show()
 
-
-
-#Detour graph removed since at large scale we predict similar results to complete graph
-
-# if __name__ == "__main__":
-#     main()
+# gen_detour(
+#     clique_size=3,
+#     detour_length=3,
+#     detour_width=4,
+#     asymmetric_connections=True
+# )

@@ -46,8 +46,7 @@ def read_graph_edges_csv(file_path:str, directed=False):
     return graph
 
 
-
-def write_undirected_graph_to_edges_csv(fname:str, graph:nx.Graph):
+def write_graph_to_edges_csv(fname:str, graph:nx.Graph, undirected:bool = True):
     file_content = "" # Will contain output to write to file
     lines = []        # Will be a list of csv rows to write to file
 
@@ -62,9 +61,10 @@ def write_undirected_graph_to_edges_csv(fname:str, graph:nx.Graph):
         to_node = edge[1]
         # Add from --> to
         lines.append(f"{from_node},{to_node}")
-        # Add to --> from (because this is an undirected graph;
-        #  if this were a directed graph, would not want this line of code)
-        lines.append(f"{to_node},{from_node}")
+        if undirected:
+            # Add to --> from (because this is an undirected graph;
+            #  if this were a directed graph, would not want this line of code)
+            lines.append(f"{to_node},{from_node}")
         # Make note of which nodes we've encountered
         nodes_represented.add(from_node)
         nodes_represented.add(to_node)
@@ -83,8 +83,14 @@ def write_undirected_graph_to_edges_csv(fname:str, graph:nx.Graph):
     with open(fname, "w") as fp:
         fp.write(file_content)
 
+def write_directed_graph_to_edges_csv(fname:str, graph:nx.Graph):
+    write_graph_to_edges_csv(fname, graph, undirected=False)
+
+def write_undirected_graph_to_edges_csv(fname:str, graph:nx.Graph):
+    write_graph_to_edges_csv(fname, graph, undirected=True)
+
 # Write networkx graph out as adjacency matrix
-def write_undirected_graph_to_matrix(fname:str, graph:nx.Graph):
+def write_graph_to_matrix(fname:str, graph:nx.Graph):
     file_content = "" # Will contain output to write to file
     lines = []        # Will be a list of csv rows to write to file
 
@@ -101,7 +107,7 @@ def write_undirected_graph_to_matrix(fname:str, graph:nx.Graph):
         fp.write(file_content)
 
 # Write networkx graph out as space-separated adjacency list
-def write_undirected_graph_to_adj_list(fname:str, graph:nx.Graph):
+def write_graph_to_adj_list(fname:str, graph:nx.Graph):
     nx.write_adjlist(graph, fname)
 
 def write_node_info(output_path:str, graph:nx.Graph):

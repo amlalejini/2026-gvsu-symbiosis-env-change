@@ -23,6 +23,11 @@
       "params": {"nodes": 100, "beta": 0.4, "alpha": 0.2, "seed": 3},
       "output_id": "rand-wax-B",
       "count": 3
+    },
+    {
+      "graph": "detour",
+      "params": {"clique_size": 3, "detour_length": 5, "detour_width": 1, "asymmetric_connections": 1},
+      "output_id": "detour"
     }
   ]
 }

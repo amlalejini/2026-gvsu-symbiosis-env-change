@@ -113,22 +113,31 @@ defaults = {
         "lattice_width": 10,
         "lattice_height": 10,
         "chain_length": 10
+    },
+    "detour": {
+        "clique_size": 10,
+        "detour_length": 10,
+        "detour_width": 1,
+        "asymmetric_connections": False
     }
-
 }
 
 output_modes = {
     "matrix": {
         "ext": "mat",
-        "write_fun": gutils.write_undirected_graph_to_matrix
+        "write_fun": gutils.write_graph_to_matrix
     },
-    "edges": {
+    "edges-directed": {
+        "ext": "csv",
+        "write_fun": gutils.write_directed_graph_to_edges_csv
+    },
+    "edges-undirected": {
         "ext": "csv",
         "write_fun": gutils.write_undirected_graph_to_edges_csv
     },
     "list": {
         "ext": "txt",
-        "write_fun": gutils.write_undirected_graph_to_adj_list
+        "write_fun": gutils.write_graph_to_adj_list
     }
 }
 
