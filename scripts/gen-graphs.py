@@ -160,7 +160,7 @@ def main():
 
     # Read graph configuration
     if not os.path.isfile(args.config):
-        print(f"Failed to open configuraiton file: {args.config}")
+        print(f"Failed to open configuration file: {args.config}")
         exit(-1)
     config = None
     with open(args.config, "r") as fp:
@@ -228,6 +228,14 @@ def main():
             print(f"  - Num nodes in graph: {len(graph)}")
             print(f"  - Num edges in graph: {len(graph.edges)}")
             output_modes[mode]["write_fun"](out_path, graph)
+
+            # Output node info?
+            if graph_cfg.get("output_node_info", False):
+                base_name = ".".join(out_name.split(".")[:-1])
+                node_info_name = f"node_info_{base_name}.csv"
+                node_info_path = os.path.join(args.dump_dir, node_info_name)
+                gutils.write_node_info(node_info_path, graph)
+
 
 if __name__ == "__main__":
     main()
