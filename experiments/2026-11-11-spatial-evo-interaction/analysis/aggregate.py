@@ -80,10 +80,8 @@ sym_int_vals_fields_summary = {
 
 run_cfg_fields_time_series = {
     "SEED",
-    "START_MOI",
-    "HEALTH_TYPE",
-    "EVENTS_CFG_PATH",
     "VERTICAL_TRANSMISSION",
+    "SPATIAL_STRUCT_MODE",
     "SPATIAL_STRUCT_CFG_PATH"
 }
 
@@ -171,7 +169,6 @@ transmission_rates_fields_time_series = {
     "successes_verttrans"
 }
 
-
 def extract_summary_data(data, target_update, fields, prefix=None):
         info = {}
 
@@ -255,6 +252,7 @@ def main():
     # Lazy-read spatial structure node info files.
     # Format {structure id: {loc_id: {region: ..., connection_point: ...}, }, ..}
     spatial_struct_node_info = {}
+    spatial_regions_by_struct = {}
 
     # Create file to hold time series data
     time_series_content = []    # This will hold all the lines to write out for a single run; written out for each run.
@@ -272,6 +270,12 @@ def main():
         with open(spatial_data_out_path, "w") as fp:
             fp.write("")
 
+    task_discovery_out_path = os.path.join(dump_dir, "task_discovery.csv")
+    task_discovery_header = None
+    task_discovery_content = []
+    with open(task_discovery_out_path, "w") as fp:
+        fp.write("")
+
     # For each run directory...
     # summary_header = None
     summary_content_lines = []
@@ -286,7 +290,7 @@ def main():
         sym_int_vals_info = {}
         time_series_info = {} # Hold time series information. Indexed by update.
         spatial_out_info = {} # Hold spatial data output info. Indexed by location.
-
+        task_discovery_info = {} # Hold task discovery information. Indexed by task.
         ########################################
         # Extract run parameters
         ########################################
@@ -383,7 +387,6 @@ def main():
             )
 
         del org_counts_data
-
         ########################################
         # Extract data from CurrentUpdateInfo.csv
         ########################################
@@ -411,7 +414,7 @@ def main():
                 prefix = "CurUpdate"
             )
 
-
+        del cur_update_info_data
         ########################################
         # Extract data from Tasks.csv
         ########################################
@@ -439,6 +442,7 @@ def main():
                 prefix = "Tasks"
             )
 
+        del tasks_data
         ########################################
         # Extract data from TransmissionRates.csv
         ########################################
@@ -466,6 +470,7 @@ def main():
                 prefix = "TransmissionRates"
             )
 
+        del transmission_rates_data
         ########################################
         # Extract data from SymbiontInteractionValues.csv
         ########################################
@@ -493,30 +498,85 @@ def main():
                 fields = sym_int_fields
             )
         )
+        del sym_int_vals_data
+        ########################################
+        # Task discovery data
+        ########################################
+        task_discovery_path = os.path.join(run_path, "output", "TaskDiscovery_data.csv")
+        task_discovery_data = utils.read_csv(task_discovery_path)
+        # Task discovery file is output at end of run (no need to filter lines or keep update).
+        # Also, because of quirks in output timing, update is one off.
+        task_discovery_info = {
+            line["task_name"]: {
+                c: line[c] for c in line if c != "output_update"
+            } for line in task_discovery_data
+        }
+        # Add run config + task complexity info to each task discovery line
+        for task in task_discovery_info:
+            task_discovery_info[task].update(
+                {field:run_params[field] for field in run_cfg_fields_time_series}
+            )
+            task_discovery_info[task]["task_complexity"] = str(utils.get_task_complexity(task))
 
+        del task_discovery_data
         ########################################
         # Spatial structure aggregation?
         ########################################
         if aggregate_spatial_data:
-            # (1) Get spatial structure file name
+            # Get spatial structure file name
             spatial_struct_path = pathlib.Path(run_params["SPATIAL_STRUCT_CFG_PATH"])
-            # Get just the file name
-            spatial_struct_name = spatial_struct_path.stem
+            spatial_struct_mode = run_params["SPATIAL_STRUCT_MODE"]
+            spatial_struct_name = None
+            # Need different behavior based on spatial structure mode
+            if spatial_struct_mode == "well-mixed":
+                # Use well-mixed
+                spatial_struct_name = "well-mixed"
+            elif spatial_struct_mode == "load":
+                # Get just the file name
+                spatial_struct_name = spatial_struct_path.stem
+            else:
+                print("Unrecognized SPATIAL_STRUCT_MODE parameter:", run_params["SPATIAL_STRUCT_MODE"])
+
             if not (spatial_struct_name in spatial_struct_node_info):
-                # Read info file
-                info_fname = f"node_info_{spatial_struct_name}.csv"
-                info_path = os.path.join(spatial_struct_dir, info_fname)
-                if not os.path.exists(info_path):
-                    print(f"Failed to find node info file for this spatial structure: {info_path}")
-                    exit(-1)
-                node_info_data = utils.read_csv(info_path)
-                # Key by loc id, add to node info dictionary
-                spatial_struct_node_info[spatial_struct_name] = {
-                    line["loc_id"]: {p: line[p] for p in line} for line in node_info_data
-                }
-                del node_info_data
+                # If in load mode, read info file.
+                # Otherwise, need to generate info.
+                if run_params["SPATIAL_STRUCT_MODE"] == "load":
+                    info_fname = f"node_info_{spatial_struct_name}.csv"
+                    info_path = os.path.join(spatial_struct_dir, info_fname)
+                    if not os.path.exists(info_path):
+                        print(f"Failed to find node info file for this spatial structure: {info_path}")
+                        exit(-1)
+                    node_info_data = utils.read_csv(info_path)
+                    # Key by loc id, add to node info dictionary + group locations by region
+                    spatial_struct_node_info[spatial_struct_name] = {}
+                    spatial_regions_by_struct[spatial_struct_name] = {}
+                    for line in node_info_data:
+                        loc_id = line["loc_id"]
+                        spatial_struct_node_info[spatial_struct_name][loc_id] = {p: line[p] for p in line}
+                        # If region column, note region. Otherwise, use structure name as name.
+                        region = line["region"] if region in line else spatial_struct_name
+                        if not region in spatial_regions_by_struct[spatial_struct_name]:
+                            spatial_regions_by_struct[spatial_struct_name][region] = set()
+                        spatial_regions_by_struct[spatial_struct_name][region].add(loc_id)
+                    # Initialize spatial regions mapping
+                    del node_info_data
+                elif run_params["SPATIAL_STRUCT_MODE"] == "well-mixed":
+                    # Get world size
+                    world_size = int(run_params["WORLD_HEIGHT"]) * int(run_params["WORLD_WIDTH"])
+                    # Fill out node info manually
+                    spatial_struct_node_info[spatial_struct_name] = {
+                        str(loc_id): {
+                            "region": "clique",
+                            "connection_point": "False",
+                            "loc_id": loc_id
+                        } for loc_id in range(world_size)
+                    }
+                    # Add clique region to spatial regions by structure
+                    spatial_regions_by_struct[spatial_struct_name]["clique"] = {str(loc_id) for loc_id in range(world_size)}
+
             # At this point, we know spatial_struct_node_info is filled out
             node_info = spatial_struct_node_info[spatial_struct_name]
+            spatial_regions = spatial_regions_by_struct[spatial_struct_name]
             # Read spatial data file
             spatial_data_path = os.path.join(run_path, "output", "Spatial_data.csv")
             spatial_data = utils.read_csv(spatial_data_path)
@@ -528,33 +588,98 @@ def main():
             }
             # Add node info information + run data
             for loc_id in spatial_out_info:
+                loc_region = node_info[loc_id]["region"]
                 spatial_out_info[loc_id].update(
                     {
                         "update": run_target_update,
                         "location_id": loc_id,
                         "connection_point": node_info[loc_id]["connection_point"],
-                        "region": node_info[loc_id]["region"]
+                        "region": loc_region
                     }
                 )
+
+            # NOTE: adjust accordingly if ever using mult-sym
             def get_endo(s):
-                return s.strip("[] ").split(" ")[-1]
+                endo_vals = s.strip("[] ").split(" ")
+                return endo_vals[-1] if len(endo_vals) > 0 else "NONE"
+
+            def categorize_int_val(val):
+                if val < -0.2:
+                    return "antagonistic"
+                elif val >= -0.2 and val <= 0.2:
+                    return "nearly_neutral"
+                elif val > 0.2:
+                    return "mutualistic"
+
+            region_counts = {
+                region: {
+                    "host_antagonistic_count": 0,
+                    "endosym_antagonistic_count": 0,
+                    "host_nearly_neutral_count": 0,
+                    "endosym_nearly_neutral_count": 0,
+                    "host_mutualistic_count": 0,
+                    "endosym_mutualistic_count": 0,
+                    "host_present_count": 0,
+                    "endosym_present_count": 0
+                } for region in spatial_regions
+            }
             for line in spatial_data:
                 loc_id = line["location_id"]
+                region = node_info[loc_id]["region"]
                 spatial_out_info[loc_id].update(
                     {
                         "host_present": line["host_present"],
                         "endosymbionts_present": get_endo(line["endosymbionts_present"]),
                         "host_interaction_value": line["host_interaction_value"],
-                        "endosym_interaction_values": get_endo(line["endosym_interaction_values"]),
+                        "endosym_interaction_value": get_endo(line["endosym_interaction_values"]),
                         "host_lineage_length": line["host_lineage_length"],
                         "endosym_lineage_length": get_endo(line["endosym_lineage_length"])
                     }
                 )
+                host_present = line["host_present"] == "1"
+                endosymbionts_present =  get_endo(line["endosymbionts_present"]) == "1"
+                # Categorize interaction values
+                if host_present:
+                    region_counts[region]["host_present_count"] += 1
+                    host_val = float(line["host_interaction_value"])
+                    cat = categorize_int_val(host_val)
+                    region_counts[region][f"host_{cat}_count"] += 1
+                if endosymbionts_present:
+                    region_counts[region]["endosym_present_count"] += 1
+                    endo_val = float(get_endo(line["endosym_interaction_values"]))
+                    cat = categorize_int_val(endo_val)
+                    region_counts[region][f"endosym_{cat}_count"] += 1
 
-            # TODO - summary information about int value counts
-            # TODO - Task discovery by location
+            # TODO: Cannot add region-labeled columns to summary!
+            # TODO - output a by-region data file!
 
-            ###############################################
+            # Summarize info about interaction value counts
+            # for region in region_counts:
+            #     # Copy region counts over to run summary info
+            #     for count_type in region_counts[region]:
+            #         run_summary_info[f"{region}_{count_type}"] = str(region_counts[region][count_type])
+            #     # Calculate by-region proportions
+            #     region_size = len(spatial_regions[region])
+            #     run_summary_info[f"{region}_size"] = str(region_size)
+            #     run_summary_info[f"{region}_host_occupancy_prop"] = region_counts[region]["host_present_count"] / region_size
+            #     run_summary_info[f"{region}_endosym_occupany_prop"] = region_counts[region]["endosym_present_count"] / region_size
+            #     run_summary_info[f"{region}_host_antagonistic_prop"] = region_counts[region]["host_antagonistic_count"] / region_size
+            #     run_summary_info[f"{region}_endosym_antagonistic_prop"] = region_counts[region]["endosym_antagonistic_count"] / region_size
+            #     run_summary_info[f"{region}_host_nearly_neutral_prop"] = region_counts[region]["host_nearly_neutral_count"] / region_size
+            #     run_summary_info[f"{region}_endosym_nearly_neutral_prop"] = region_counts[region]["endosym_nearly_neutral_count"] / region_size
+            #     run_summary_info[f"{region}_host_mutualistic_prop"] = region_counts[region]["host_mutualistic_count"] / region_size
+            #     run_summary_info[f"{region}_endosym_mutualistic_prop"] = region_counts[region]["endosym_mutualistic_count"] / region_size
+
+            # Annotate task discovery info with region information
+            discovery_types = ["host", "host_parent_offspring", "sym", "sym_parent_offspring"]
+            for task in task_discovery_info:
+                for disc_type in discovery_types:
+                    discovered = task_discovery_info[task][f"{disc_type}_discovered"] == "1"
+                    location = task_discovery_info[task][f"{disc_type}_discovered_location"]
+                    region = "NONE" if not discovered else spatial_out_info[location]["region"]
+                    task_discovery_info[task][f"{disc_type}_discovered_region"] = region
+
+            # ---------------------------
             # Go ahead and write out spatial out info lines
             locations = [int(loc_id) for loc_id in spatial_out_info]
             locations.sort()
@@ -580,7 +705,7 @@ def main():
             del spatial_data_content
             del spatial_data
             del spatial_out_info
-            ###############################################
+            # ---------------------------
 
         ########################################
         # Add summary info to summary content lines
@@ -588,8 +713,9 @@ def main():
         sym_interaction_values_content_lines.append(sym_int_vals_info)
 
         ############################################################
-        # Output time series data for this run
+        # Output time series data and task discovery data for this run
         if run_finished_target:
+            # ---- Write time series information ----
             # Order the updates
             time_series_update_order = list(time_series_updates)
             time_series_update_order.sort()
@@ -598,7 +724,7 @@ def main():
             time_series_fields.sort()
             # If we haven't written the header, write it.
             write_header = False
-            if time_series_header == None:
+            if time_series_header is None:
                 write_header = True
                 time_series_header = ",".join(time_series_fields)
             elif time_series_header != ",".join(time_series_fields):
@@ -615,7 +741,34 @@ def main():
                 fp.write("\n")
                 fp.write("\n".join(time_series_content))
             time_series_content = []
-        ############################################################
+            # ---- ----
+
+            # ----- Write task discovery information ----
+            task_disc_order = list(task_discovery_info.keys())
+            task_disc_order.sort()
+            # Order the fields
+            task_disc_fields = list(task_discovery_info[task_disc_order[0]].keys())
+            task_disc_fields.sort()
+            # If we haven't written the header, write it.
+            write_header = False
+            if task_discovery_header is None:
+                write_header = True
+                task_discovery_header = ",".join(task_disc_fields)
+            elif task_discovery_header != ",".join(task_disc_fields):
+                print("Task discovery header mismatch!")
+                exit(-1)
+
+            task_discovery_content = []
+            for task in task_disc_order:
+                task_discovery_content.append(",".join([str(task_discovery_info[task][field]) for field in task_disc_fields]))
+            with open(task_discovery_out_path, "a") as fp:
+                if write_header:
+                    fp.write(task_discovery_header)
+                fp.write("\n")
+                fp.write("\n".join(task_discovery_content))
+            # ---- ----
+
+    ############################################################
     # Write summary info out
     summary_path = os.path.join(dump_dir, "summary.csv")
     utils.write_csv(summary_path, summary_content_lines)
@@ -625,7 +778,6 @@ def main():
     # print incomplete runs
     print("Incomplete runs:")
     print("\n".join(incomplete_runs))
-
 
 if __name__ == "__main__":
     main()
