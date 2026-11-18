@@ -567,6 +567,11 @@ def main():
                         spatial_struct_node_info[spatial_struct_name][loc_id] = {p: line[p] for p in line}
                         # If region column, note region. Otherwise, use structure name as name.
                         region = line["region"] if "region" in line else spatial_struct_name
+                        # Add any required info in case not in info file
+                        if not "region" in spatial_struct_node_info[spatial_struct_name][loc_id]:
+                            spatial_struct_node_info[spatial_struct_name][loc_id]["region"] = spatial_struct_name
+                        if not "connection_point" in spatial_struct_node_info[spatial_struct_name][loc_id]:
+                            spatial_struct_node_info[spatial_struct_name][loc_id]["connection_point"] = "0"
                         if not region in spatial_regions_by_struct[spatial_struct_name]:
                             spatial_regions_by_struct[spatial_struct_name][region] = set()
                         spatial_regions_by_struct[spatial_struct_name][region].add(loc_id)
