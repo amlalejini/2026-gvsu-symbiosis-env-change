@@ -589,7 +589,9 @@ def main():
                         } for loc_id in range(world_size)
                     }
                     # Add clique region to spatial regions by structure
-                    spatial_regions_by_struct[spatial_struct_name]["clique"] = {str(loc_id) for loc_id in range(world_size)}
+                    spatial_regions_by_struct[spatial_struct_name] = {
+                        "clique": {str(loc_id) for loc_id in range(world_size)}
+                    }
                 elif run_params["SPATIAL_STRUCT_MODE"] == "grid":
                     # Get world size
                     world_size = int(run_params["WORLD_HEIGHT"]) * int(run_params["WORLD_WIDTH"])
@@ -602,7 +604,9 @@ def main():
                         } for loc_id in range(world_size)
                     }
                     # Add grid region to spatial regions by structure
-                    spatial_regions_by_struct[spatial_struct_name]["grid"] = {str(loc_id) for loc_id in range(world_size)}
+                    spatial_regions_by_struct[spatial_struct_name] = {
+                        "grid": {str(loc_id) for loc_id in range(world_size)}
+                    }
 
             # At this point, we know spatial_struct_node_info is filled out
             node_info = spatial_struct_node_info[spatial_struct_name]
