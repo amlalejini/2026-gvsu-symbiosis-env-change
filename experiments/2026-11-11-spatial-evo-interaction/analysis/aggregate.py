@@ -9,6 +9,7 @@ import os
 import sys
 import pathlib
 from scipy.stats import entropy
+import statistics
 
 # Add scripts directory to path, import utilities from scripts directory.
 sys.path.append(
@@ -262,12 +263,20 @@ def main():
     with open(time_series_fpath, "w") as fp:
         fp.write("")
 
+    # spatial_data_content holds per-location data
     spatial_data_out_path = os.path.join(dump_dir, "spatial_data.csv")
     spatial_data_header = None
     spatial_data_content = []
+    # spatial_region_data_content holds per-region data
+    spatial_region_data_out_path = os.path.join(dump_dir, "spatial_region_data.csv")
+    spatial_region_data_header = None
+    spatial_region_content = []
     if aggregate_spatial_data:
         # Create file to hold spatial data
         with open(spatial_data_out_path, "w") as fp:
+            fp.write("")
+        # Create file to hold spatial region data
+        with open(spatial_region_data_out_path, "w") as fp:
             fp.write("")
 
     task_discovery_out_path = os.path.join(dump_dir, "task_discovery.csv")
@@ -291,6 +300,7 @@ def main():
         time_series_info = {} # Hold time series information. Indexed by update.
         spatial_out_info = {} # Hold spatial data output info. Indexed by location.
         task_discovery_info = {} # Hold task discovery information. Indexed by task.
+        region_out_info = {} # Hold information by region. Indexed by region name.
         ########################################
         # Extract run parameters
         ########################################
@@ -531,6 +541,8 @@ def main():
             if spatial_struct_mode == "well-mixed":
                 # Use well-mixed
                 spatial_struct_name = "well-mixed"
+            elif spatial_struct_mode == "grid":
+                spatial_struct_name = "grid"
             elif spatial_struct_mode == "load":
                 # Get just the file name
                 spatial_struct_name = spatial_struct_path.stem
@@ -554,7 +566,7 @@ def main():
                         loc_id = line["loc_id"]
                         spatial_struct_node_info[spatial_struct_name][loc_id] = {p: line[p] for p in line}
                         # If region column, note region. Otherwise, use structure name as name.
-                        region = line["region"] if region in line else spatial_struct_name
+                        region = line["region"] if "region" in line else spatial_struct_name
                         if not region in spatial_regions_by_struct[spatial_struct_name]:
                             spatial_regions_by_struct[spatial_struct_name][region] = set()
                         spatial_regions_by_struct[spatial_struct_name][region].add(loc_id)
@@ -573,6 +585,19 @@ def main():
                     }
                     # Add clique region to spatial regions by structure
                     spatial_regions_by_struct[spatial_struct_name]["clique"] = {str(loc_id) for loc_id in range(world_size)}
+                elif run_params["SPATIAL_STRUCT_MODE"] == "grid":
+                    # Get world size
+                    world_size = int(run_params["WORLD_HEIGHT"]) * int(run_params["WORLD_WIDTH"])
+                    # Fill out node info manually
+                    spatial_struct_node_info[spatial_struct_name] = {
+                        str(loc_id): {
+                            "region": "grid",
+                            "connection_point": "False",
+                            "loc_id": loc_id
+                        } for loc_id in range(world_size)
+                    }
+                    # Add grid region to spatial regions by structure
+                    spatial_regions_by_struct[spatial_struct_name]["grid"] = {str(loc_id) for loc_id in range(world_size)}
 
             # At this point, we know spatial_struct_node_info is filled out
             node_info = spatial_struct_node_info[spatial_struct_name]
@@ -610,8 +635,8 @@ def main():
                     return "nearly_neutral"
                 elif val > 0.2:
                     return "mutualistic"
-
-            region_counts = {
+            # Initialize regional statistics
+            region_out_info = {
                 region: {
                     "host_antagonistic_count": 0,
                     "endosym_antagonistic_count": 0,
@@ -620,9 +645,20 @@ def main():
                     "host_mutualistic_count": 0,
                     "endosym_mutualistic_count": 0,
                     "host_present_count": 0,
-                    "endosym_present_count": 0
+                    "endosym_present_count": 0,
+                    "host_sym_task_profile_compatible_count": 0,
+                    "host_sym_matching_parent_task_profile_count": 0,
+                    "avg_host_lineage_length": [] # Will get converted to float later
                 } for region in spatial_regions
             }
+            # Add configuration information to regional output information
+            for region in region_out_info:
+                region_out_info[region].update(
+                    {field:run_params[field] for field in run_cfg_fields_time_series}
+                )
+                region_out_info[region]["region_size"] = len(spatial_regions[region])
+                region_out_info[region]["region"] = region
+
             for line in spatial_data:
                 loc_id = line["location_id"]
                 region = node_info[loc_id]["region"]
@@ -638,46 +674,66 @@ def main():
                 )
                 host_present = line["host_present"] == "1"
                 endosymbionts_present =  get_endo(line["endosymbionts_present"]) == "1"
+                host_sym_compatibility = get_endo(line["host_sym_task_profile_compatibility"])
+                region_out_info[region]["host_sym_task_profile_compatible_count"] += host_sym_compatibility == "1"
+                region_out_info[region]["avg_host_lineage_length"].append(int(line["host_lineage_length"]))
+                host_parent_task_profile = line["host_task_profile"]
+                endosym_parent_task_profile = get_endo(line["endosym_task_profiles"])
+                parent_task_profile_match = host_parent_task_profile == endosym_parent_task_profile
+                region_out_info[region]["host_sym_matching_parent_task_profile_count"] += parent_task_profile_match
                 # Categorize interaction values
                 if host_present:
-                    region_counts[region]["host_present_count"] += 1
+                    region_out_info[region]["host_present_count"] += 1
                     host_val = float(line["host_interaction_value"])
                     cat = categorize_int_val(host_val)
-                    region_counts[region][f"host_{cat}_count"] += 1
+                    region_out_info[region][f"host_{cat}_count"] += 1
                 if endosymbionts_present:
-                    region_counts[region]["endosym_present_count"] += 1
+                    region_out_info[region]["endosym_present_count"] += 1
                     endo_val = float(get_endo(line["endosym_interaction_values"]))
                     cat = categorize_int_val(endo_val)
-                    region_counts[region][f"endosym_{cat}_count"] += 1
+                    region_out_info[region][f"endosym_{cat}_count"] += 1
 
-            # TODO: Cannot add region-labeled columns to summary!
-            # TODO - output a by-region data file!
-
-            # Summarize info about interaction value counts
-            # for region in region_counts:
-            #     # Copy region counts over to run summary info
-            #     for count_type in region_counts[region]:
-            #         run_summary_info[f"{region}_{count_type}"] = str(region_counts[region][count_type])
-            #     # Calculate by-region proportions
-            #     region_size = len(spatial_regions[region])
-            #     run_summary_info[f"{region}_size"] = str(region_size)
-            #     run_summary_info[f"{region}_host_occupancy_prop"] = region_counts[region]["host_present_count"] / region_size
-            #     run_summary_info[f"{region}_endosym_occupany_prop"] = region_counts[region]["endosym_present_count"] / region_size
-            #     run_summary_info[f"{region}_host_antagonistic_prop"] = region_counts[region]["host_antagonistic_count"] / region_size
-            #     run_summary_info[f"{region}_endosym_antagonistic_prop"] = region_counts[region]["endosym_antagonistic_count"] / region_size
-            #     run_summary_info[f"{region}_host_nearly_neutral_prop"] = region_counts[region]["host_nearly_neutral_count"] / region_size
-            #     run_summary_info[f"{region}_endosym_nearly_neutral_prop"] = region_counts[region]["endosym_nearly_neutral_count"] / region_size
-            #     run_summary_info[f"{region}_host_mutualistic_prop"] = region_counts[region]["host_mutualistic_count"] / region_size
-            #     run_summary_info[f"{region}_endosym_mutualistic_prop"] = region_counts[region]["endosym_mutualistic_count"] / region_size
+            # Calculate regional proportions
+            for region in region_out_info:
+                # Calculate proportion for each count type
+                region_size = region_out_info[region]["region_size"]
+                num_hosts = region_out_info[region]["host_present_count"]
+                num_endosyms = region_out_info[region]["endosym_present_count"]
+                # Host regional proportions
+                region_out_info[region]["host_occupancy_regional_prop"] = region_out_info[region]["host_present_count"] / region_size
+                region_out_info[region]["host_nearly_neutral_regional_prop"] = region_out_info[region]["host_nearly_neutral_count"] / num_hosts if num_hosts > 0 else 0
+                region_out_info[region]["host_mutualistic_regional_prop"] = region_out_info[region]["host_mutualistic_count"] / num_hosts if num_hosts > 0 else 0
+                region_out_info[region]["host_antagonistic_regional_prop"] = region_out_info[region]["host_antagonistic_count"] / num_hosts if num_hosts > 0 else 0
+                # Endosymbiont regional proportions
+                region_out_info[region]["endosym_occupany_regional_prop"] = region_out_info[region]["endosym_present_count"] / region_size
+                region_out_info[region]["endosym_nearly_neutral_regional_prop"] = region_out_info[region]["endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["endosym_mutualistic_regional_prop"] = region_out_info[region]["endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["endosym_antagonistic_regional_prop"] = region_out_info[region]["endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                # Host-endosymbiont profile compatibility proportion in this region
+                region_out_info[region]["host_sym_task_profile_compatible_regional_prop"] = region_out_info[region]["host_sym_task_profile_compatible_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["host_sym_matching_parent_task_profile_regional_prop"] = region_out_info[region]["host_sym_matching_parent_task_profile_count"] / num_endosyms if num_endosyms > 0 else 0
+                # Average host lineage lineage length
+                region_out_info[region]["avg_host_lineage_length"] = statistics.mean(region_out_info[region]["avg_host_lineage_length"])
 
             # Annotate task discovery info with region information
             discovery_types = ["host", "host_parent_offspring", "sym", "sym_parent_offspring"]
+            # Initialize regional complex task discovery counts to 0
+            for disc_type in discovery_types:
+                for region in region_out_info:
+                    region_out_info[region][f"{disc_type}_complex_task_discoveries"] = 0
+                    region_out_info[region][f"{disc_type}_complexity_gt4_task_discoveries"] = 0
+
             for task in task_discovery_info:
+                task_complexity = utils.get_task_complexity(task)
                 for disc_type in discovery_types:
                     discovered = task_discovery_info[task][f"{disc_type}_discovered"] == "1"
                     location = task_discovery_info[task][f"{disc_type}_discovered_location"]
                     region = "NONE" if not discovered else spatial_out_info[location]["region"]
                     task_discovery_info[task][f"{disc_type}_discovered_region"] = region
+                    # Count task discoveries with complexity greater than 1
+                    if discovered:
+                        region_out_info[region][f"{disc_type}_complex_task_discoveries"] += task_complexity > 1
+                        region_out_info[region][f"{disc_type}_complexity_gt4_task_discoveries"] += task_complexity >= 4
 
             # ---------------------------
             # Go ahead and write out spatial out info lines
@@ -686,7 +742,7 @@ def main():
             spatial_out_fields = list(spatial_out_info[str(locations[0])].keys())
             spatial_out_fields.sort()
             write_header = False
-            if spatial_data_header == None:
+            if spatial_data_header is None:
                 write_header = True
                 spatial_data_header = ",".join(spatial_out_fields)
             elif spatial_data_header != ",".join(spatial_out_fields):
@@ -705,6 +761,33 @@ def main():
             del spatial_data_content
             del spatial_data
             del spatial_out_info
+
+            # Write out region info lines
+            regions = list(region_out_info.keys())
+            regions.sort()
+            region_fields = list(region_out_info[regions[0]].keys())
+            region_fields.sort()
+            write_header = False
+            region_header = ",".join(region_fields)
+            if spatial_region_data_header is None:
+                write_header = True
+                spatial_region_data_header = region_header
+            elif spatial_region_data_header != region_header:
+                print("Spatial region data header mismatch!")
+                exit(-1)
+            # Write out content line-by-line
+            spatial_region_content = []
+            for region in regions:
+                spatial_region_content.append(
+                    ",".join([str(region_out_info[region][field]) for field in region_fields])
+                )
+            with open(spatial_region_data_out_path, "a") as fp:
+                if write_header:
+                    fp.write(spatial_region_data_header)
+                fp.write("\n")
+                fp.write("\n".join(spatial_region_content))
+            del spatial_region_content
+            del region_out_info
             # ---------------------------
 
         ########################################
