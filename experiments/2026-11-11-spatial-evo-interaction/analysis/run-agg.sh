@@ -9,7 +9,7 @@ SPATIAL_STRUCT_DIR=${EXP_DIR}/hpc/spatial-structs/
 DUMP_DIR=./dump
 FINAL_UPDATE=200000
 TS_UNITS=interval
-TS_RES=1
+TS_RES=10
 
 python3 aggregate.py \
   --data_dir ${DATA_DIR} \
@@ -17,6 +17,5 @@ python3 aggregate.py \
   --summary_update ${FINAL_UPDATE} \
   --time_series_units ${TS_UNITS} \
   --time_series_resolution ${TS_RES} \
-  --spatial_agg 1 \
-  --spatial_struct_dir ${SPATIAL_STRUCT_DIR} \
-  --spatial_by_loc_agg 0
+  --spatial_agg \
+  --spatial_struct_dir ${SPATIAL_STRUCT_DIR}

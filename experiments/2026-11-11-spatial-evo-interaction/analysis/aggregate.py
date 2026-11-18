@@ -218,8 +218,8 @@ def main():
     parser.add_argument("--time_series_units", type=str, default="interval", choices=["interval", "total"], help="Unit for resolution of time series")
     parser.add_argument("--time_series_resolution", type=int, default=1, help="What resolution should we collect time series data at?")
     # -- Spatial data aggregation options --
-    parser.add_argument("--spatial_agg", type=bool, default=False, help="Also aggregate spatial data?")
-    parser.add_argument("--spatial_by_loc_agg", type=bool, default=False, help="Output by-location data (warning: likely a very large file)")
+    parser.add_argument("--spatial_agg", action="store_true", help="Also aggregate spatial data?")
+    parser.add_argument("--spatial_by_loc_agg", action="store_true", help="Output by-location data (warning: likely a very large file)")
     parser.add_argument("--spatial_struct_dir", type=str, default=None, help="If aggregating spatial data, where to find spatial structure node info files?")
 
     args = parser.parse_args()
@@ -231,7 +231,7 @@ def main():
     aggregate_spatial_data = args.spatial_agg
     spatial_struct_dir = args.spatial_struct_dir
     spatial_by_loc_agg = args.spatial_by_loc_agg
-    print(spatial_by_loc_agg)
+
     if not os.path.exists(data_dir):
         print("Unable to find data directory.")
         exit(-1)
