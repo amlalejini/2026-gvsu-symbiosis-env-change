@@ -219,6 +219,7 @@ def main():
     parser.add_argument("--time_series_resolution", type=int, default=1, help="What resolution should we collect time series data at?")
     # -- Spatial data aggregation options --
     parser.add_argument("--spatial_agg", type=bool, default=False, help="Also aggregate spatial data?")
+    parser.add_argument("--spatial_by_loc_agg", type=bool, default=False, help="Output by-location data (warning: likely a very large file)")
     parser.add_argument("--spatial_struct_dir", type=str, default=None, help="If aggregating spatial data, where to find spatial structure node info files?")
 
     args = parser.parse_args()
@@ -229,6 +230,7 @@ def main():
     time_series_resolution = args.time_series_resolution
     aggregate_spatial_data = args.spatial_agg
     spatial_struct_dir = args.spatial_struct_dir
+    spatial_by_loc_agg = args.spatial_by_loc_agg
 
     if not os.path.exists(data_dir):
         print("Unable to find data directory.")
@@ -273,8 +275,9 @@ def main():
     spatial_region_content = []
     if aggregate_spatial_data:
         # Create file to hold spatial data
-        with open(spatial_data_out_path, "w") as fp:
-            fp.write("")
+        if spatial_by_loc_agg:
+            with open(spatial_data_out_path, "w") as fp:
+                fp.write("")
         # Create file to hold spatial region data
         with open(spatial_region_data_out_path, "w") as fp:
             fp.write("")
@@ -746,27 +749,28 @@ def main():
 
             # ---------------------------
             # Go ahead and write out spatial out info lines
-            locations = [int(loc_id) for loc_id in spatial_out_info]
-            locations.sort()
-            spatial_out_fields = list(spatial_out_info[str(locations[0])].keys())
-            spatial_out_fields.sort()
-            write_header = False
-            if spatial_data_header is None:
-                write_header = True
-                spatial_data_header = ",".join(spatial_out_fields)
-            elif spatial_data_header != ",".join(spatial_out_fields):
-                print("Spatial data header mismatch!")
-                exit(-1)
-            # Write spatial content line-by-line
-            spatial_data_content = []
-            for loc in locations:
-                loc_id = str(loc)
-                spatial_data_content.append(",".join([str(spatial_out_info[loc_id][field]) for field in spatial_out_fields]))
-            with open(spatial_data_out_path, "a") as fp:
-                if write_header:
-                    fp.write(spatial_data_header)
-                fp.write("\n")
-                fp.write("\n".join(spatial_data_content))
+            if spatial_by_loc_agg:
+                locations = [int(loc_id) for loc_id in spatial_out_info]
+                locations.sort()
+                spatial_out_fields = list(spatial_out_info[str(locations[0])].keys())
+                spatial_out_fields.sort()
+                write_header = False
+                if spatial_data_header is None:
+                    write_header = True
+                    spatial_data_header = ",".join(spatial_out_fields)
+                elif spatial_data_header != ",".join(spatial_out_fields):
+                    print("Spatial data header mismatch!")
+                    exit(-1)
+                # Write spatial content line-by-line
+                spatial_data_content = []
+                for loc in locations:
+                    loc_id = str(loc)
+                    spatial_data_content.append(",".join([str(spatial_out_info[loc_id][field]) for field in spatial_out_fields]))
+                with open(spatial_data_out_path, "a") as fp:
+                    if write_header:
+                        fp.write(spatial_data_header)
+                    fp.write("\n")
+                    fp.write("\n".join(spatial_data_content))
             del spatial_data_content
             del spatial_data
             del spatial_out_info

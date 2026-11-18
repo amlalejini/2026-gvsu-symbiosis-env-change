@@ -18,4 +18,5 @@ python3 aggregate.py \
   --time_series_units ${TS_UNITS} \
   --time_series_resolution ${TS_RES} \
   --spatial_agg 1 \
-  --spatial_struct_dir ${SPATIAL_STRUCT_DIR}
+  --spatial_struct_dir ${SPATIAL_STRUCT_DIR} \
+  --spatial_by_loc_agg 0
