@@ -88,3 +88,20 @@ def filter_time_points_interval(all_points, interval, guarantee_final_point=True
         sorted_points[i] for i in range(len(sorted_points))
         if (i == 0) or (not (i % interval)) or (guarantee_final_point and (i == (len(sorted_points) - 1)))
     ]
+
+task_complexity_mapping = {
+    "not": 1,
+    "nand": 1,
+    "or_not": 2,
+    "orn": 2,
+    "and": 2,
+    "or": 3,
+    "and_not": 3,
+    "andn": 3,
+    "nor": 4,
+    "xor": 4,
+    "equ": 5
+}
+
+def get_task_complexity(task):
+    return task_complexity_mapping.get(task.lower(), None)
