@@ -15,6 +15,7 @@ EXP_DIR=${REPO_DIR}/experiments/${EXP_NAME}/
 
 # Load correct environment variables, modules, etc.
 source ${REPO_DIR}/hpc-env/msu-hpc-env.sh
+source ${REPO_DIR}/pyenv/bin/activate
 
 cd ${EXP_DIR}/analysis
 ./run-agg.sh
