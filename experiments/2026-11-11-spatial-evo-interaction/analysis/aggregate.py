@@ -231,7 +231,7 @@ def main():
     aggregate_spatial_data = args.spatial_agg
     spatial_struct_dir = args.spatial_struct_dir
     spatial_by_loc_agg = args.spatial_by_loc_agg
-
+    print(spatial_by_loc_agg)
     if not os.path.exists(data_dir):
         print("Unable to find data directory.")
         exit(-1)
@@ -771,7 +771,7 @@ def main():
                         fp.write(spatial_data_header)
                     fp.write("\n")
                     fp.write("\n".join(spatial_data_content))
-            del spatial_data_content
+                del spatial_data_content
             del spatial_data
             del spatial_out_info
 
