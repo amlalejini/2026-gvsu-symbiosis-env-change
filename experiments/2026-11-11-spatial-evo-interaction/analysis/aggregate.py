@@ -210,6 +210,26 @@ def add_time_series_info(
                     time_series_data[line_update][f"{prefix}_{field}"] = line[field]
 
 
+def append_rows(file_path, row_info, header_order, write_header=False, row_order=None):
+    if write_header:
+        header = ",".join(header_order)
+    content = None
+    if row_order is None:
+        content = [
+            ",".join([str(row_info[row_id][field]) for field in header_order])
+            for row_id in row_info
+        ]
+    else:
+        content = [
+            ",".join([str(row_info[row_id][field]) for field in header_order])
+            for row_id in row_order
+        ]
+    with open(file_path, "a") as fp:
+        if write_header:
+            fp.write(header)
+        fp.write("\n")
+        fp.write("\n".join(content))
+
 def main():
     parser = argparse.ArgumentParser(description = "Run submission script.")
     parser.add_argument("--data_dir", type=str, help="Where is the base output directory for each run?")
@@ -263,10 +283,17 @@ def main():
     # Create file to hold time series data
     time_series_content = []    # This will hold all the lines to write out for a single run; written out for each run.
     time_series_header = None   # Holds the time series file header (verified for consistency across runs)
-    time_series_fpath = os.path.join(dump_dir, f"time_series.csv")
+    time_series_fpath = os.path.join(dump_dir, "time_series.csv")
 
     with open(time_series_fpath, "w") as fp:
         fp.write("")
+
+    sym_int_vals_time_series_content = []
+    sym_int_vals_time_series_header = None
+    sym_int_vals_time_series_fpath = os.path.join(dump_dir, "symbiont_interaction_values_time_series.csv")
+    if use_interaction_values:
+        with open(sym_int_vals_time_series_fpath, "w") as fp:
+            fp.write("")
 
     # spatial_data_content holds per-location data
     spatial_data_out_path = os.path.join(dump_dir, "spatial_data.csv")
@@ -307,6 +334,7 @@ def main():
         spatial_out_info = {} # Hold spatial data output info. Indexed by location.
         task_discovery_info = {} # Hold task discovery information. Indexed by task.
         region_out_info = {} # Hold information by region. Indexed by region name.
+        sym_int_vals_time_series_info = {} # Hold symbiont interaction values over time. Indexed by update.
         ########################################
         # Extract run parameters
         ########################################
@@ -377,8 +405,17 @@ def main():
         run_target_update = utils.nearest(target_update, updates)
         run_summary_info["update"] = run_target_update
         run_summary_info["reached_target_update"] = run_finished_target
-        sym_int_vals_info["update"] = run_target_update
-        sym_int_vals_info["reached_target_update"] = run_finished_target
+
+
+        if use_interaction_values:
+            sym_int_vals_info["update"] = run_target_update
+            sym_int_vals_info["reached_target_update"] = run_finished_target
+            sym_int_vals_time_series_info = {
+                update: {field:run_params[field] for field in run_cfg_fields_time_series}
+                for update in time_series_updates
+            }
+            for update in time_series_updates:
+                sym_int_vals_time_series_info[update]["update"] = update
         # ---
 
         # Extract summary info
@@ -516,7 +553,11 @@ def main():
                 )
             )
 
-            # TODO - add interaction values over time data file
+            add_time_series_info(
+                time_series_data = sym_int_vals_time_series_info,
+                run_data = sym_int_vals_data,
+                fields = list(sym_int_vals_data[0].keys())
+            )
 
             del sym_int_vals_data
         ########################################
@@ -800,17 +841,15 @@ def main():
                 elif spatial_data_header != ",".join(spatial_out_fields):
                     print("Spatial data header mismatch!")
                     exit(-1)
-                # Write spatial content line-by-line
-                spatial_data_content = []
-                for loc in locations:
-                    loc_id = str(loc)
-                    spatial_data_content.append(",".join([str(spatial_out_info[loc_id][field]) for field in spatial_out_fields]))
-                with open(spatial_data_out_path, "a") as fp:
-                    if write_header:
-                        fp.write(spatial_data_header)
-                    fp.write("\n")
-                    fp.write("\n".join(spatial_data_content))
+                append_rows(
+                    file_path = spatial_data_out_path,
+                    row_info = spatial_out_info,
+                    header_order = spatial_out_fields,
+                    write_header = write_header,
+                    row_order = locations
+                )
                 del spatial_data_content
+
             del spatial_data
             del spatial_out_info
 
@@ -827,18 +866,13 @@ def main():
             elif spatial_region_data_header != region_header:
                 print("Spatial region data header mismatch!")
                 exit(-1)
-            # Write out content line-by-line
-            spatial_region_content = []
-            for region in regions:
-                spatial_region_content.append(
-                    ",".join([str(region_out_info[region][field]) for field in region_fields])
-                )
-            with open(spatial_region_data_out_path, "a") as fp:
-                if write_header:
-                    fp.write(spatial_region_data_header)
-                fp.write("\n")
-                fp.write("\n".join(spatial_region_content))
-            del spatial_region_content
+            append_rows(
+                file_path = spatial_region_data_out_path,
+                row_info = region_out_info,
+                header_order = region_fields,
+                write_header = write_header,
+                row_order = regions
+            )
             del region_out_info
             # ---------------------------
 
@@ -866,18 +900,34 @@ def main():
             elif time_series_header != ",".join(time_series_fields):
                 print("Time series header mismatch!")
                 exit(-1)
-
-            # Write time series content line-by-line
-            time_series_content = []
-            for u in time_series_update_order:
-                time_series_content.append(",".join([str(time_series_info[u][field]) for field in time_series_fields]))
-            with open(time_series_fpath, "a") as fp:
-                if write_header:
-                    fp.write(time_series_header)
-                fp.write("\n")
-                fp.write("\n".join(time_series_content))
-            time_series_content = []
+            append_rows(
+                file_path = time_series_fpath,
+                row_info = time_series_info,
+                header_order = time_series_fields,
+                write_header = write_header,
+                row_order = time_series_update_order
+            )
             # ---- ----
+
+            # ----- Write sym int values over time ----
+            # note: uses same updates as time series data info
+            if use_interaction_values:
+                sym_int_vals_time_series_fields = list(sym_int_vals_time_series_info[time_series_update_order[0]].keys())
+                sym_int_vals_time_series_fields.sort()
+                write_header = False
+                if sym_int_vals_time_series_header is None:
+                    write_header = True
+                    sym_int_vals_time_series_header = ",".join(sym_int_vals_time_series_fields)
+                elif sym_int_vals_time_series_header != ",".join(sym_int_vals_time_series_fields):
+                    print("Symbiont interaction value time series header mismatch!")
+                    exit(-1)
+                append_rows(
+                    file_path = sym_int_vals_time_series_fpath,
+                    row_info = sym_int_vals_time_series_info,
+                    header_order = sym_int_vals_time_series_fields,
+                    write_header = write_header,
+                    row_order = time_series_update_order
+                )
 
             # ----- Write task discovery information ----
             task_disc_order = list(task_discovery_info.keys())
@@ -893,21 +943,20 @@ def main():
             elif task_discovery_header != ",".join(task_disc_fields):
                 print("Task discovery header mismatch!")
                 exit(-1)
-
-            task_discovery_content = []
-            for task in task_disc_order:
-                task_discovery_content.append(",".join([str(task_discovery_info[task][field]) for field in task_disc_fields]))
-            with open(task_discovery_out_path, "a") as fp:
-                if write_header:
-                    fp.write(task_discovery_header)
-                fp.write("\n")
-                fp.write("\n".join(task_discovery_content))
+            append_rows(
+                file_path = task_discovery_out_path,
+                row_info = task_discovery_info,
+                header_order = task_disc_fields,
+                write_header = write_header,
+                row_order = task_disc_order
+            )
             # ---- ----
 
     ############################################################
     # Write summary info out
     summary_path = os.path.join(dump_dir, "summary.csv")
     utils.write_csv(summary_path, summary_content_lines)
+
     if use_interaction_values:
         sym_int_path = os.path.join(dump_dir, "symbiont_interaction_values.csv")
         utils.write_csv(sym_int_path, sym_interaction_values_content_lines)
