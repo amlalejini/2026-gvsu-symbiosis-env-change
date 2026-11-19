@@ -656,6 +656,14 @@ def main():
                     "endosym_nearly_neutral_count": 0,
                     "host_mutualistic_count": 0,
                     "endosym_mutualistic_count": 0,
+
+                    "matching_host_antagonistic_count": 0,
+                    "matching_endosym_antagonistic_count": 0,
+                    "matching_host_nearly_neutral_count": 0,
+                    "matching_endosym_nearly_neutral_count": 0,
+                    "matching_host_mutualistic_count": 0,
+                    "matching_endosym_mutualistic_count": 0,
+
                     "host_present_count": 0,
                     "endosym_present_count": 0,
                     "host_sym_task_profile_compatible_count": 0,
@@ -691,19 +699,26 @@ def main():
                 region_out_info[region]["avg_host_lineage_length"].append(int(line["host_lineage_length"]))
                 host_parent_task_profile = line["host_task_profile"]
                 endosym_parent_task_profile = get_endo(line["endosym_task_profiles"])
-                parent_task_profile_match = host_parent_task_profile == endosym_parent_task_profile
-                region_out_info[region]["host_sym_matching_parent_task_profile_count"] += parent_task_profile_match
+                parent_task_profile_match = False
+                if host_present and endosymbionts_present:
+                    parent_task_profile_match = host_parent_task_profile == endosym_parent_task_profile
+                    region_out_info[region]["host_sym_matching_parent_task_profile_count"] += parent_task_profile_match
+                line["parent_task_profile_match"] = parent_task_profile_match
                 # Categorize interaction values
                 if host_present:
                     region_out_info[region]["host_present_count"] += 1
                     host_val = float(line["host_interaction_value"])
                     cat = categorize_int_val(host_val)
                     region_out_info[region][f"host_{cat}_count"] += 1
+                    if parent_task_profile_match:
+                        region_out_info[region][f"matching_host_{cat}_count"] += 1
                 if endosymbionts_present:
                     region_out_info[region]["endosym_present_count"] += 1
                     endo_val = float(get_endo(line["endosym_interaction_values"]))
                     cat = categorize_int_val(endo_val)
                     region_out_info[region][f"endosym_{cat}_count"] += 1
+                    if parent_task_profile_match:
+                        region_out_info[region][f"matching_endosym_{cat}_count"] += 1
 
             # Calculate regional proportions
             for region in region_out_info:
@@ -721,12 +736,18 @@ def main():
                 region_out_info[region]["endosym_nearly_neutral_regional_prop"] = region_out_info[region]["endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
                 region_out_info[region]["endosym_mutualistic_regional_prop"] = region_out_info[region]["endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
                 region_out_info[region]["endosym_antagonistic_regional_prop"] = region_out_info[region]["endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_host_antagonistic_count"] = region_out_info[region]["matching_host_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_endosym_antagonistic_count"] = region_out_info[region]["matching_endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_host_nearly_neutral_count"] = region_out_info[region]["matching_host_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_endosym_nearly_neutral_count"] = region_out_info[region]["matching_endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_host_mutualistic_count"] = region_out_info[region]["matching_host_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                region_out_info[region]["matching_endosym_mutualistic_count"] = region_out_info[region]["matching_endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
                 # Host-endosymbiont profile compatibility proportion in this region
                 region_out_info[region]["host_sym_task_profile_compatible_regional_prop"] = region_out_info[region]["host_sym_task_profile_compatible_count"] / num_endosyms if num_endosyms > 0 else 0
                 region_out_info[region]["host_sym_matching_parent_task_profile_regional_prop"] = region_out_info[region]["host_sym_matching_parent_task_profile_count"] / num_endosyms if num_endosyms > 0 else 0
                 # Average host lineage lineage length
                 region_out_info[region]["avg_host_lineage_length"] = statistics.mean(region_out_info[region]["avg_host_lineage_length"])
-
+                # Antagnoism/mutualistm for engaged host-symbiont pairs
             # Annotate task discovery info with region information
             discovery_types = ["host", "host_parent_offspring", "sym", "sym_parent_offspring"]
             # Initialize regional complex task discovery counts to 0
