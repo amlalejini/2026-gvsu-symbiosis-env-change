@@ -794,12 +794,12 @@ def main():
                     region_out_info[region]["endosym_mutualistic_regional_prop"] = region_out_info[region]["endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
                     region_out_info[region]["endosym_antagonistic_regional_prop"] = region_out_info[region]["endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
                     # Task-matching pairs interaction value relationships
-                    region_out_info[region]["matching_host_antagonistic_count"] = region_out_info[region]["matching_host_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                    region_out_info[region]["matching_endosym_antagonistic_count"] = region_out_info[region]["matching_endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                    region_out_info[region]["matching_host_nearly_neutral_count"] = region_out_info[region]["matching_host_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
-                    region_out_info[region]["matching_endosym_nearly_neutral_count"] = region_out_info[region]["matching_endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
-                    region_out_info[region]["matching_host_mutualistic_count"] = region_out_info[region]["matching_host_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                    region_out_info[region]["matching_endosym_mutualistic_count"] = region_out_info[region]["matching_endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_host_antagonistic_regional_prop"] = region_out_info[region]["matching_host_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_antagonistic_regional_prop"] = region_out_info[region]["matching_endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_host_nearly_neutral_regional_prop"] = region_out_info[region]["matching_host_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_nearly_neutral_regional_prop"] = region_out_info[region]["matching_endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_host_mutualistic_regional_prop"] = region_out_info[region]["matching_host_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_mutualistic_regional_prop"] = region_out_info[region]["matching_endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
 
                 # Host-endosymbiont profile compatibility proportion in this region
                 region_out_info[region]["host_sym_task_profile_compatible_regional_prop"] = region_out_info[region]["host_sym_task_profile_compatible_count"] / num_endosyms if num_endosyms > 0 else 0
