@@ -1,0 +1,1108 @@
+# Spatial structure - Evolvable interaction values
+
+Varies vertical transmission rate across a range of spatial structures.
+This experiment focuses on detour graphs with variable proportions of locations in the clique versus detour path.
+Additionally, we vary the "width" of the detour path (creating a "straw" structure that connects to the clique on both ends).
+
+## Dependencies and setup
+
+Load required libraries.
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(khroma)
+library(knitr)
+library(kableExtra)
+library(janitor)
+```
+
+Configure variable to hold path to working directory.
+
+```{r}
+# Build relative path from R's working directory to what is actually the working
+# directory for this experiment.
+experiment_slug <- "2026-11-11-spatial-evo-interaction"
+working_directory <- paste(
+  "experiments",
+  experiment_slug,
+  "analysis",
+  sep = "/"
+)
+```
+
+Configure default plot theme, create directory for saving plots.
+
+```{r}
+# Use the cowplot theme as our default for ggplots
+theme_set(theme_cowplot())
+# Create directory to save plots
+plot_dir <- paste(
+  working_directory,
+  "plots",
+  sep = "/"
+)
+dir.create(
+  plot_dir,
+  showWarnings = FALSE
+)
+```
+
+### Load and preprocess data
+
+```{r}
+tasks <- c("NOT", "NAND", "OR_NOT", "AND", "OR", "AND_NOT", "NOR", "XOR", "EQU")
+max_pop_size <- 100 * 100
+threshold <- 0.025 * max_pop_size
+num_replicates <- 10
+```
+
+#### Summary data
+
+```{r}
+summary_data_path <- paste(
+  working_directory,
+  "data",
+  "summary.csv",
+  sep = "/"
+)
+summary_data <- read_csv(summary_data_path)
+# Do any universal preprocessing
+summary_data <- summary_data %>%
+  mutate(
+    SEED = as.factor(SEED),
+    START_MOI = as.factor(START_MOI),
+    VERTICAL_TRANSMISSION = as.factor(VERTICAL_TRANSMISSION),
+    HEALTH_TYPE = as.factor(HEALTH_TYPE),
+    HEALTH_INTERACTION_CHANCE = as.factor(HEALTH_INTERACTION_CHANCE),
+    MUTUALIST_CYCLE_GAIN_PROP = as.factor(MUTUALIST_CYCLE_GAIN_PROP),
+    PARASITE_CYCLE_LOSS_PROP = as.factor(PARASITE_CYCLE_LOSS_PROP),
+    PARASITE_BASE_CYCLE_PROP = as.factor(PARASITE_BASE_CYCLE_PROP),
+    MUTUALIST_CYCLE_DONATE_MULTIPLIER = as.factor(MUTUALIST_CYCLE_DONATE_MULTIPLIER), # nolint: line_length_linter.
+    PARASITE_CYCLE_STEAL_MULTIPLIER = as.factor(PARASITE_CYCLE_STEAL_MULTIPLIER), # nolint: line_length_linter.
+    HOST_ONLY_FIRST_TASK_CREDIT = as.factor(HOST_ONLY_FIRST_TASK_CREDIT),
+    SYM_ONLY_FIRST_TASK_CREDIT = as.factor(SYM_ONLY_FIRST_TASK_CREDIT),
+    EVENTS_CFG_PATH = as.factor(EVENTS_CFG_PATH),
+    SPATIAL_STRUCT_MODE = as.factor(SPATIAL_STRUCT_MODE),
+    SPATIAL_STRUCT_CFG_PATH = as.factor(SPATIAL_STRUCT_CFG_PATH)
+  ) %>%
+  mutate(
+    task_credit = paste0(
+      "H", HOST_ONLY_FIRST_TASK_CREDIT,
+      "S", SYM_ONLY_FIRST_TASK_CREDIT
+    ),
+    interaction_multiplier = as.factor(PARASITE_CYCLE_STEAL_MULTIPLIER),
+    environment = case_when(
+      SPATIAL_STRUCT_MODE == "well-mixed" ~ "well-mixed",
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d7500x1.mat" ~ "detour_wm2500_d7500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d1875x4.mat" ~ "detour_wm2500_d1875x4",  # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d5000x1.mat" ~ "detour_wm5000_d5000x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d1250x4.mat" ~ "detour_wm5000_d1250x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d2500x1.mat" ~ "detour_wm7500_d2500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d625x4.mat" ~ "detour_wm7500_d625x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "cycle.mat" ~ "cycle",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    environment = factor(
+      environment,
+      levels = c(
+        "well-mixed",
+        "detour_wm7500_d625x4",
+        "detour_wm7500_d2500x1",
+        "detour_wm5000_d1250x4",
+        "detour_wm5000_d5000x1",
+        "detour_wm2500_d1875x4",
+        "detour_wm2500_d7500x1",
+        "cycle"
+      )
+    ),
+    treatment = paste0(
+      environment, "_", VERTICAL_TRANSMISSION
+    )
+  ) %>%
+  mutate(
+    treatment = as.factor(
+      treatment
+    )
+  )
+```
+
+#### Time series data
+
+```{r}
+time_data_path <- paste(
+  working_directory,
+  "data",
+  "time_series.csv",
+  sep = "/"
+)
+time_data <- read_csv(time_data_path)
+
+# Do any universal preprocessing
+time_data <- time_data %>%
+  mutate(
+    SEED = as.factor(SEED),
+    VERTICAL_TRANSMISSION = as.factor(VERTICAL_TRANSMISSION),
+    SPATIAL_STRUCT_MODE = as.factor(SPATIAL_STRUCT_MODE),
+    SPATIAL_STRUCT_CFG_PATH = as.factor(SPATIAL_STRUCT_CFG_PATH)
+  ) %>%
+  mutate(
+    environment = case_when(
+      SPATIAL_STRUCT_MODE == "well-mixed" ~ "well-mixed",
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d7500x1.mat" ~ "detour_wm2500_d7500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d1875x4.mat" ~ "detour_wm2500_d1875x4",  # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d5000x1.mat" ~ "detour_wm5000_d5000x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d1250x4.mat" ~ "detour_wm5000_d1250x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d2500x1.mat" ~ "detour_wm7500_d2500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d625x4.mat" ~ "detour_wm7500_d625x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "cycle.mat" ~ "cycle",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    environment = factor(
+      environment,
+      levels = c(
+        "well-mixed",
+        "detour_wm7500_d625x4",
+        "detour_wm7500_d2500x1",
+        "detour_wm5000_d1250x4",
+        "detour_wm5000_d5000x1",
+        "detour_wm2500_d1875x4",
+        "detour_wm2500_d7500x1",
+        "cycle"
+      )
+    ),
+    treatment = paste0(
+      environment, "_", VERTICAL_TRANSMISSION
+    )
+  ) %>%
+  mutate(
+    treatment = as.factor(
+      treatment
+    )
+  )
+```
+#### Symbiont interaction values
+
+```{r}
+sym_int_vals_path <-  paste(
+  working_directory,
+  "data",
+  "symbiont_interaction_values.csv",
+  sep = "/"
+)
+sym_int_vals_data <- read_csv(sym_int_vals_path)
+
+sym_int_vals_data <- sym_int_vals_data %>%
+  mutate(
+    SEED = as.factor(SEED),
+    START_MOI = as.factor(START_MOI),
+    VERTICAL_TRANSMISSION = as.factor(VERTICAL_TRANSMISSION),
+    MUTUALIST_CYCLE_DONATE_MULTIPLIER = as.factor(MUTUALIST_CYCLE_DONATE_MULTIPLIER), # nolint: line_length_linter.
+    PARASITE_CYCLE_STEAL_MULTIPLIER = as.factor(PARASITE_CYCLE_STEAL_MULTIPLIER), # nolint: line_length_linter.
+    HEALTH_TYPE = as.factor(HEALTH_TYPE),
+    PARASITE_CYCLE_LOSS_PROP = as.factor(PARASITE_CYCLE_LOSS_PROP),
+    HEALTH_INTERACTION_CHANCE = as.factor(HEALTH_INTERACTION_CHANCE),
+    PARASITE_BASE_CYCLE_PROP = as.factor(PARASITE_BASE_CYCLE_PROP),
+    SPATIAL_STRUCT_MODE = as.factor(SPATIAL_STRUCT_MODE),
+    SPATIAL_STRUCT_CFG_PATH = as.factor(SPATIAL_STRUCT_CFG_PATH)
+  ) %>%
+  mutate(
+    environment = case_when(
+      SPATIAL_STRUCT_MODE == "well-mixed" ~ "well-mixed",
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d7500x1.mat" ~ "detour_wm2500_d7500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d1875x4.mat" ~ "detour_wm2500_d1875x4",  # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d5000x1.mat" ~ "detour_wm5000_d5000x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d1250x4.mat" ~ "detour_wm5000_d1250x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d2500x1.mat" ~ "detour_wm7500_d2500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d625x4.mat" ~ "detour_wm7500_d625x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "cycle.mat" ~ "cycle",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    environment = factor(
+      environment,
+      levels = c(
+        "well-mixed",
+        "detour_wm7500_d625x4",
+        "detour_wm7500_d2500x1",
+        "detour_wm5000_d1250x4",
+        "detour_wm5000_d5000x1",
+        "detour_wm2500_d1875x4",
+        "detour_wm2500_d7500x1",
+        "cycle"
+      )
+    ),
+    treatment = paste0(
+      environment, "_", VERTICAL_TRANSMISSION
+    )
+  ) %>%
+  mutate(
+    treatment = as.factor(
+      treatment
+    ),
+    # Note: could come back to this to adjust how we do sorting
+    super_mutualist_prop = (Hist_0.8 + Hist_0.9) / count
+  )
+
+# Give each seed a rep_id based on its super mutualist prop
+sym_int_vals_data <- sym_int_vals_data %>%
+  group_by(
+    treatment
+  ) %>%
+  arrange(
+    super_mutualist_prop
+  ) %>%
+  mutate(
+    rep_id = rep(1:10, 1)
+  ) %>%
+  ungroup()
+
+# Pivot histogram columns to long format
+long_sym_int_vals_data <- sym_int_vals_data %>%
+  select(
+    SEED,
+    VERTICAL_TRANSMISSION,
+    environment,
+    treatment,
+    count,
+    rep_id,
+    super_mutualist_prop,
+    "Hist_-0.1",
+    "Hist_-0.2",
+    "Hist_-0.3",
+    "Hist_-0.4",
+    "Hist_-0.5",
+    "Hist_-0.6",
+    "Hist_-0.7",
+    "Hist_-0.8",
+    "Hist_-0.9",
+    "Hist_-1",
+    "Hist_0.0",
+    "Hist_0.1",
+    "Hist_0.2",
+    "Hist_0.3",
+    "Hist_0.4",
+    "Hist_0.5",
+    "Hist_0.6",
+    "Hist_0.7",
+    "Hist_0.8",
+    "Hist_0.9"
+  ) %>%
+  rename(total_syms = count) %>%
+  pivot_longer(
+    cols = -c(
+      SEED,
+      VERTICAL_TRANSMISSION,
+      environment,
+      treatment,
+      total_syms,
+      super_mutualist_prop,
+      rep_id
+    ),
+    names_to = "int_val_range",
+    values_to = "int_val_count"
+  ) %>%
+  mutate(
+    int_val_range = as.factor(int_val_range)
+  )
+```
+
+Summarize interaction value ranges:
+- Collapse bins to fewer categories, matching with ALife 2025 tag paper bins.
+
+```{r}
+long_sym_int_vals_data <- long_sym_int_vals_data %>%
+  # Recategorize
+  mutate(
+    int_val_range_reduced = case_when(
+      int_val_range == "Hist_-1" ~ "-1.0 to -0.8 (Parasitic)",
+      int_val_range == "Hist_-0.9" ~ "-1.0 to -0.8 (Parasitic)",
+      int_val_range == "Hist_-0.8" ~ "-0.8 to -0.6 (Parasitic)",
+      int_val_range == "Hist_-0.7" ~ "-0.8 to -0.6 (Parasitic)",
+      int_val_range == "Hist_-0.6" ~ "-0.6 to -0.4 (Detrimental)",
+      int_val_range == "Hist_-0.5" ~ "-0.6 to -0.4 (Detrimental)",
+      int_val_range == "Hist_-0.4" ~ "-0.4 to -0.2 (Detrimental)",
+      int_val_range == "Hist_-0.3" ~ "-0.4 to -0.2 (Detrimental)",
+      int_val_range == "Hist_-0.2" ~ "-0.2 to 0 (Nearly neutral)",
+      int_val_range == "Hist_-0.1" ~ "-0.2 to 0 (Nearly neutral)",
+      int_val_range == "Hist_0.0" ~ "0 to 0.2 (Nearly neutral)",
+      int_val_range == "Hist_0.1" ~ "0 to 0.2 (Nearly neutral)",
+      int_val_range == "Hist_0.2" ~ "0.2 to 0.4 (Positive)",
+      int_val_range == "Hist_0.3" ~ "0.2 to 0.4 (Positive)",
+      int_val_range == "Hist_0.4" ~ "0.4 to 0.6 (Positive)",
+      int_val_range == "Hist_0.5" ~ "0.4 to 0.6 (Positive)",
+      int_val_range == "Hist_0.6" ~ "0.6 to 0.8 (Mutualistic)",
+      int_val_range == "Hist_0.7" ~ "0.6 to 0.8 (Mutualistic)",
+      int_val_range == "Hist_0.8" ~ "0.8 to 1.0 (Mutualistic)",
+      int_val_range == "Hist_0.9" ~ "0.8 to 1.0 (Mutualistic)",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    int_val_range_reduced = factor(
+      int_val_range_reduced,
+      levels = c(
+        "-1.0 to -0.8 (Parasitic)",
+        "-0.8 to -0.6 (Parasitic)",
+        "-0.6 to -0.4 (Detrimental)",
+        "-0.4 to -0.2 (Detrimental)",
+        "-0.2 to 0 (Nearly neutral)",
+        "0 to 0.2 (Nearly neutral)",
+        "0.2 to 0.4 (Positive)",
+        "0.4 to 0.6 (Positive)",
+        "0.6 to 0.8 (Mutualistic)",
+        "0.8 to 1.0 (Mutualistic)"
+      ),
+      labels = c(
+        "-1.0:-0.8 (Parasitic)",
+        "-0.8:-0.6 (Parasitic)",
+        "-0.6:-0.4 (Detrimental)",
+        "-0.4:-0.2 (Detrimental)",
+        "-0.2:0.0 (Nearly neutral)",
+        "0.0:0.2 (Nearly neutral)",
+        "0.2:0.4 (Positive)",
+        "0.4:0.6 (Positive)",
+        "0.6:0.8 (Mutualistic)",
+        "0.8:1.0 (Mutualistic)"
+      )
+    )
+  ) %>%
+  # Collapse
+  group_by(
+    SEED,
+    total_syms, # Note: total syms will be same for all rows of same seed.
+    VERTICAL_TRANSMISSION,
+    environment,
+    treatment,
+    int_val_range_reduced,
+    rep_id
+  ) %>%
+  summarize(
+    int_val_count = sum(int_val_count)
+  ) %>%
+  mutate(
+    int_val_prop = int_val_count / total_syms,
+    VT = VERTICAL_TRANSMISSION,
+    env = environment
+  )
+```
+
+#### Spatial regions data
+
+Data where each row includes information about one region in one run.
+
+```{r}
+spatial_region_data_path <- paste(
+  working_directory,
+  "data",
+  "spatial_region_data.csv",
+  sep = "/"
+)
+spatial_region_data <- read_csv(spatial_region_data_path)
+
+spatial_region_data <- spatial_region_data %>%
+  mutate(
+    SEED = as.factor(SEED),
+    VERTICAL_TRANSMISSION = as.factor(VERTICAL_TRANSMISSION),
+    SPATIAL_STRUCT_MODE = as.factor(SPATIAL_STRUCT_MODE),
+    SPATIAL_STRUCT_CFG_PATH = as.factor(SPATIAL_STRUCT_CFG_PATH),
+    region = as.factor(region)
+  ) %>%
+  mutate(
+    environment = case_when(
+      SPATIAL_STRUCT_MODE == "well-mixed" ~ "well-mixed",
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d7500x1.mat" ~ "detour_wm2500_d7500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d1875x4.mat" ~ "detour_wm2500_d1875x4",  # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d5000x1.mat" ~ "detour_wm5000_d5000x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d1250x4.mat" ~ "detour_wm5000_d1250x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d2500x1.mat" ~ "detour_wm7500_d2500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d625x4.mat" ~ "detour_wm7500_d625x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "cycle.mat" ~ "cycle",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    environment = factor(
+      environment,
+      levels = c(
+        "well-mixed",
+        "detour_wm7500_d625x4",
+        "detour_wm7500_d2500x1",
+        "detour_wm5000_d1250x4",
+        "detour_wm5000_d5000x1",
+        "detour_wm2500_d1875x4",
+        "detour_wm2500_d7500x1",
+        "cycle"
+      )
+    ),
+    treatment = paste0(
+      environment, "_", VERTICAL_TRANSMISSION
+    )
+  ) %>%
+  mutate(
+    treatment = as.factor(
+      treatment
+    )
+  )
+
+detour_graph_region_data <- spatial_region_data %>%
+  mutate(
+    is_detour_graph = str_detect(environment, "detour_")
+  ) %>%
+  filter(is_detour_graph == TRUE)
+```
+
+#### Task discoveries data
+
+Data where each row represents task discovery information for one task in one run.
+
+```{r}
+task_discovery_data_path <- paste(
+  working_directory,
+  "data",
+  "task_discovery.csv",
+  sep = "/"
+)
+task_discovery_data <- read_csv(task_discovery_data_path)
+
+task_discovery_data <- task_discovery_data %>%
+  mutate(
+    SEED = as.factor(SEED),
+    VERTICAL_TRANSMISSION = as.factor(VERTICAL_TRANSMISSION),
+    SPATIAL_STRUCT_MODE = as.factor(SPATIAL_STRUCT_MODE),
+    SPATIAL_STRUCT_CFG_PATH = as.factor(SPATIAL_STRUCT_CFG_PATH),
+    host_discovered_region = as.factor(host_discovered_region),
+    host_parent_offspring_discovered_region = as.factor(host_parent_offspring_discovered_region), # nolint: line_length_linter.
+    sym_discovered_region = as.factor(sym_discovered_region),
+    sym_parent_offspring_discovered_region = as.factor(sym_parent_offspring_discovered_region), # nolint: line_length_linter.
+    task_id = as.factor(task_id),
+    task_name = as.factor(task_name),
+  ) %>%
+  mutate(
+    environment = case_when(
+      SPATIAL_STRUCT_MODE == "well-mixed" ~ "well-mixed",
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d7500x1.mat" ~ "detour_wm2500_d7500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm2500_d1875x4.mat" ~ "detour_wm2500_d1875x4",  # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d5000x1.mat" ~ "detour_wm5000_d5000x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm5000_d1250x4.mat" ~ "detour_wm5000_d1250x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d2500x1.mat" ~ "detour_wm7500_d2500x1", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "detour_wm7500_d625x4.mat" ~ "detour_wm7500_d625x4", # nolint: line_length_linter.
+      SPATIAL_STRUCT_CFG_PATH == "cycle.mat" ~ "cycle",
+      .default = "unknown"
+    )
+  ) %>%
+  mutate(
+    environment = factor(
+      environment,
+      levels = c(
+        "well-mixed",
+        "detour_wm7500_d625x4",
+        "detour_wm7500_d2500x1",
+        "detour_wm5000_d1250x4",
+        "detour_wm5000_d5000x1",
+        "detour_wm2500_d1875x4",
+        "detour_wm2500_d7500x1",
+        "cycle"
+      )
+    ),
+    treatment = paste0(
+      environment, "_", VERTICAL_TRANSMISSION
+    )
+  ) %>%
+  mutate(
+    treatment = as.factor(
+      treatment
+    )
+  )
+```
+
+## Extinctions
+
+If a run was configured without a maximum symbiont age, it is possible that even
+if symbionts are not extinct, they are not capable of independent reproduction.
+I.e., they can lose their ability to reproduce on their own, disengage from their host,
+and then become "vistigial" free-riders.
+
+```{r}
+sym_min_pop_sizes <- time_data %>%
+  group_by(SEED) %>%
+  slice_min(
+    OrgCounts_hosted_sym_count,
+    n = 1
+  ) %>%
+  slice_min(
+    update,
+    n = 1
+  )
+
+reps_with_extinct_syms <- sym_min_pop_sizes %>%
+  group_by(
+    treatment
+  ) %>%
+  summarize(
+    reps_with_extinct_syms = sum(OrgCounts_hosted_sym_count == 0)
+  )
+
+host_min_pop_sizes <- time_data %>%
+  group_by(SEED) %>%
+  slice_min(
+    OrgCounts_host_count,
+    n = 1
+  ) %>%
+  slice_min(
+    update,
+    n = 1
+  )
+
+reps_with_extinct_hosts <- host_min_pop_sizes %>%
+  group_by(
+    treatment
+  ) %>%
+  summarize(
+    reps_with_extinct_hosts = sum(OrgCounts_host_count == 0)
+  )
+
+extinctions <- full_join(
+  reps_with_extinct_syms,
+  reps_with_extinct_hosts
+)
+extinctions <- extinctions %>%
+  arrange(
+    desc(reps_with_extinct_hosts), desc(reps_with_extinct_syms)
+  )
+extinction_table <- kable(extinctions) %>%
+  kable_styling(latex_options = "striped")
+save_kable(
+  extinction_table,
+  paste(
+    plot_dir,
+    "extinctions.pdf",
+    sep = "/"
+  )
+)
+```
+
+## Symbiont interaction values
+
+```{r}
+tenhelix <- c(
+  "#891901",
+  "#B50142",
+  "#D506AD",
+  "#AB08FF",
+  "#5731FD",
+  "#4755FF",
+  "#42bcf5",
+  "#42e0f5",
+  "#9af1fc",
+  "#c5f6fc"
+)
+sym_int_val_props_plt <- long_sym_int_vals_data %>%
+  ggplot(
+    mapping = aes(
+      fill = int_val_range_reduced,
+      x = rep_id,
+      y = int_val_count,
+      na.rm = TRUE
+    )
+  ) +
+  geom_col(
+    position = "fill",
+    na.rm = TRUE,
+    width = 1
+  ) +
+  scale_fill_manual(
+    name = "Behavior",
+    values = tenhelix
+  ) +
+  labs(
+    x = "Replicate",
+    y = "Proportion of symbiont population"
+  ) +
+  facet_grid(
+    env ~ VT,
+    labeller = label_both
+  ) +
+  guides(
+    fill = guide_legend(nrow = 2, byrow = TRUE)
+  ) +
+  theme(
+    legend.position = "bottom"
+  )
+
+ggsave(
+  file = paste(plot_dir, "sym_interaction_value_counts.pdf", sep = "/"),
+  plot = sym_int_val_props_plt,
+  width = 30,
+  height = 20
+)
+```
+
+## Spatial region summary analyses
+
+### Endosymbiont occupancy by region
+
+```{r}
+regional_endosym_occuppancy_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = endosym_occupany_regional_prop,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(plot_dir, "regional_endosym_occuppancy_plt.pdf", sep = "/"),
+  plot = regional_endosym_occuppancy_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Average host lineage length by region
+
+```{r}
+regional_avg_host_lineage_length_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = avg_host_lineage_length,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(plot_dir, "regional_avg_host_lineage_length_plt.pdf", sep = "/"),
+  plot = regional_avg_host_lineage_length_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Host-symbiont matching parent task profiles
+
+```{r}
+host_sym_matching_parent_task_profile_regional_prop_plt <- detour_graph_region_data %>%
+  filter(endosym_present_count > 0) %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = host_sym_matching_parent_task_profile_regional_prop,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "host_sym_matching_parent_task_profile_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = host_sym_matching_parent_task_profile_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Antagonistic interaction values by region
+
+```{r}
+endosym_antagonistic_regional_prop_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = endosym_antagonistic_regional_prop,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "endosym_antagonistic_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = endosym_antagonistic_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+#### Proportion of matching endosymbionts with antagonistic interaction value
+
+```{r}
+matching_endosym_antagonistic_regional_prop_plt <- detour_graph_region_data %>%
+  filter(endosym_present_count > 0) %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = matching_endosym_antagonistic_count,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "matching_endosym_antagonistic_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = matching_endosym_antagonistic_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Mutualistic interaction values by region
+
+```{r}
+endosym_mutualistic_regional_prop_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = endosym_mutualistic_regional_prop,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "endosym_mutualistic_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = endosym_mutualistic_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+```{r}
+matching_endosym_mutualistic_regional_prop_plt <- detour_graph_region_data %>%
+  filter(endosym_present_count > 0) %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = matching_endosym_mutualistic_count,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "matching_endosym_mutualistic_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = matching_endosym_mutualistic_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Nearly neutral interaction values by region
+
+```{r}
+matching_endosym_nearly_neutral_regional_prop_plt <- detour_graph_region_data %>%
+  filter(endosym_present_count > 0) %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = matching_endosym_nearly_neutral_count,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "matching_endosym_nearly_neutral_regional_prop_plt.pdf",
+    sep = "/"
+  ),
+  plot = matching_endosym_nearly_neutral_regional_prop_plt,
+  width = 20,
+  height = 15
+)
+```
+
+### Host parent-offspring complex task discovery by region
+
+```{r}
+host_parent_offspring_complex_task_discoveries_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = host_parent_offspring_complex_task_discoveries,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "host_parent_offspring_complex_task_discoveries_plt.pdf",
+    sep = "/"
+  ),
+  plot = host_parent_offspring_complex_task_discoveries_plt,
+  width = 20,
+  height = 15
+)
+```
+
+```{r}
+host_parent_offspring_complexity_gt4_task_discoveries_plt <- detour_graph_region_data %>%
+  ggplot(
+    mapping = aes(
+      x = region,
+      y = host_parent_offspring_complexity_gt4_task_discoveries,
+      color = region
+    )
+  ) +
+  geom_point(
+    mapping = aes(fill = region),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_x_discrete(
+    breaks = c("clique", "detour"),
+    labels = c("c", "d")
+  ) +
+  facet_grid(
+    environment ~ VERTICAL_TRANSMISSION,
+    axes = "all_x"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(color = "black", linewidth = 1)
+  )
+
+ggsave(
+  file = paste(
+    plot_dir,
+    "host_parent_offspring_complexity_gt4_task_discoveries.pdf",
+    sep = "/"
+  ),
+  plot = host_parent_offspring_complexity_gt4_task_discoveries_plt,
+  width = 20,
+  height = 15
+)
+```
