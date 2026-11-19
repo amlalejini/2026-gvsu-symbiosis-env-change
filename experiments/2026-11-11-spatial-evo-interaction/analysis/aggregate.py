@@ -217,6 +217,7 @@ def main():
     parser.add_argument("--summary_update", type=int, help="Update to pull summary data for?")
     parser.add_argument("--time_series_units", type=str, default="interval", choices=["interval", "total"], help="Unit for resolution of time series")
     parser.add_argument("--time_series_resolution", type=int, default=1, help="What resolution should we collect time series data at?")
+    parser.add_argument("--use_interaction_values", action="store_true", help="Collect interation value data? Add interaction value-based columns?")
     # -- Spatial data aggregation options --
     parser.add_argument("--spatial_agg", action="store_true", help="Also aggregate spatial data?")
     parser.add_argument("--spatial_by_loc_agg", action="store_true", help="Output by-location data (warning: likely a very large file)")
@@ -231,6 +232,8 @@ def main():
     aggregate_spatial_data = args.spatial_agg
     spatial_struct_dir = args.spatial_struct_dir
     spatial_by_loc_agg = args.spatial_by_loc_agg
+    use_interaction_values = args.use_interaction_values
+    print(use_interaction_values)
 
     if not os.path.exists(data_dir):
         print("Unable to find data directory.")
@@ -487,31 +490,35 @@ def main():
         ########################################
         # Extract data from SymbiontInteractionValues.csv
         ########################################
-        # update,mean_intval,count,Hist_-1,Hist_-0.9,Hist_-0.8,Hist_-0.7,Hist_-0.6,Hist_-0.5,Hist_-0.4,Hist_-0.3,Hist_-0.2,Hist_-0.1,Hist_0.0,Hist_0.1,Hist_0.2,Hist_0.3,Hist_0.4,Hist_0.5,Hist_0.6,Hist_0.7,Hist_0.8,Hist_0.9
-        sym_int_vals_path = os.path.join(run_path, "output", "SymbiontInteractionValues_data.csv")
-        sym_int_vals_data = utils.read_csv(sym_int_vals_path)
+        if use_interaction_values:
+            # update,mean_intval,count,Hist_-1,Hist_-0.9,Hist_-0.8,Hist_-0.7,Hist_-0.6,Hist_-0.5,Hist_-0.4,Hist_-0.3,Hist_-0.2,Hist_-0.1,Hist_0.0,Hist_0.1,Hist_0.2,Hist_0.3,Hist_0.4,Hist_0.5,Hist_0.6,Hist_0.7,Hist_0.8,Hist_0.9
+            sym_int_vals_path = os.path.join(run_path, "output", "SymbiontInteractionValues_data.csv")
+            sym_int_vals_data = utils.read_csv(sym_int_vals_path)
 
-        # Update run summary info
-        run_summary_info.update(
-            extract_summary_data(
-                data = sym_int_vals_data,
-                target_update = run_target_update,
-                fields = sym_int_vals_fields_summary,
-                prefix = "sym_int_vals"
+            # Update run summary info
+            run_summary_info.update(
+                extract_summary_data(
+                    data = sym_int_vals_data,
+                    target_update = run_target_update,
+                    fields = sym_int_vals_fields_summary,
+                    prefix = "sym_int_vals"
+                )
             )
-        )
 
-        # Update interaction value file
-        sym_int_fields = set(sym_int_vals_data[0].keys())
-        sym_int_fields.remove("update")
-        sym_int_vals_info.update(
-            extract_summary_data(
-                data = sym_int_vals_data,
-                target_update = run_target_update,
-                fields = sym_int_fields
+            # Update interaction value file
+            sym_int_fields = set(sym_int_vals_data[0].keys())
+            sym_int_fields.remove("update")
+            sym_int_vals_info.update(
+                extract_summary_data(
+                    data = sym_int_vals_data,
+                    target_update = run_target_update,
+                    fields = sym_int_fields
+                )
             )
-        )
-        del sym_int_vals_data
+
+            # TODO - add interaction values over time data file
+
+            del sym_int_vals_data
         ########################################
         # Task discovery data
         ########################################
@@ -650,20 +657,6 @@ def main():
             # Initialize regional statistics
             region_out_info = {
                 region: {
-                    "host_antagonistic_count": 0,
-                    "endosym_antagonistic_count": 0,
-                    "host_nearly_neutral_count": 0,
-                    "endosym_nearly_neutral_count": 0,
-                    "host_mutualistic_count": 0,
-                    "endosym_mutualistic_count": 0,
-
-                    "matching_host_antagonistic_count": 0,
-                    "matching_endosym_antagonistic_count": 0,
-                    "matching_host_nearly_neutral_count": 0,
-                    "matching_endosym_nearly_neutral_count": 0,
-                    "matching_host_mutualistic_count": 0,
-                    "matching_endosym_mutualistic_count": 0,
-
                     "host_present_count": 0,
                     "endosym_present_count": 0,
                     "host_sym_task_profile_compatible_count": 0,
@@ -678,6 +671,25 @@ def main():
                 )
                 region_out_info[region]["region_size"] = len(spatial_regions[region])
                 region_out_info[region]["region"] = region
+                if use_interaction_values:
+                    region_out_info[region].update(
+                        {
+                            "host_antagonistic_count": 0,
+                            "endosym_antagonistic_count": 0,
+                            "host_nearly_neutral_count": 0,
+                            "endosym_nearly_neutral_count": 0,
+                            "host_mutualistic_count": 0,
+                            "endosym_mutualistic_count": 0,
+
+                            "matching_host_antagonistic_count": 0,
+                            "matching_endosym_antagonistic_count": 0,
+                            "matching_host_nearly_neutral_count": 0,
+                            "matching_endosym_nearly_neutral_count": 0,
+                            "matching_host_mutualistic_count": 0,
+                            "matching_endosym_mutualistic_count": 0
+                        }
+                    )
+
 
             for line in spatial_data:
                 loc_id = line["location_id"]
@@ -707,18 +719,20 @@ def main():
                 # Categorize interaction values
                 if host_present:
                     region_out_info[region]["host_present_count"] += 1
-                    host_val = float(line["host_interaction_value"])
-                    cat = categorize_int_val(host_val)
-                    region_out_info[region][f"host_{cat}_count"] += 1
-                    if parent_task_profile_match:
-                        region_out_info[region][f"matching_host_{cat}_count"] += 1
+                    if use_interaction_values:
+                        host_val = float(line["host_interaction_value"])
+                        cat = categorize_int_val(host_val)
+                        region_out_info[region][f"host_{cat}_count"] += 1
+                        if parent_task_profile_match:
+                            region_out_info[region][f"matching_host_{cat}_count"] += 1
                 if endosymbionts_present:
                     region_out_info[region]["endosym_present_count"] += 1
-                    endo_val = float(get_endo(line["endosym_interaction_values"]))
-                    cat = categorize_int_val(endo_val)
-                    region_out_info[region][f"endosym_{cat}_count"] += 1
-                    if parent_task_profile_match:
-                        region_out_info[region][f"matching_endosym_{cat}_count"] += 1
+                    if use_interaction_values:
+                        endo_val = float(get_endo(line["endosym_interaction_values"]))
+                        cat = categorize_int_val(endo_val)
+                        region_out_info[region][f"endosym_{cat}_count"] += 1
+                        if parent_task_profile_match:
+                            region_out_info[region][f"matching_endosym_{cat}_count"] += 1
 
             # Calculate regional proportions
             for region in region_out_info:
@@ -726,22 +740,26 @@ def main():
                 region_size = region_out_info[region]["region_size"]
                 num_hosts = region_out_info[region]["host_present_count"]
                 num_endosyms = region_out_info[region]["endosym_present_count"]
-                # Host regional proportions
+                # Regional occupancy
                 region_out_info[region]["host_occupancy_regional_prop"] = region_out_info[region]["host_present_count"] / region_size
-                region_out_info[region]["host_nearly_neutral_regional_prop"] = region_out_info[region]["host_nearly_neutral_count"] / num_hosts if num_hosts > 0 else 0
-                region_out_info[region]["host_mutualistic_regional_prop"] = region_out_info[region]["host_mutualistic_count"] / num_hosts if num_hosts > 0 else 0
-                region_out_info[region]["host_antagonistic_regional_prop"] = region_out_info[region]["host_antagonistic_count"] / num_hosts if num_hosts > 0 else 0
-                # Endosymbiont regional proportions
                 region_out_info[region]["endosym_occupany_regional_prop"] = region_out_info[region]["endosym_present_count"] / region_size
-                region_out_info[region]["endosym_nearly_neutral_regional_prop"] = region_out_info[region]["endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["endosym_mutualistic_regional_prop"] = region_out_info[region]["endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["endosym_antagonistic_regional_prop"] = region_out_info[region]["endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_host_antagonistic_count"] = region_out_info[region]["matching_host_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_endosym_antagonistic_count"] = region_out_info[region]["matching_endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_host_nearly_neutral_count"] = region_out_info[region]["matching_host_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_endosym_nearly_neutral_count"] = region_out_info[region]["matching_endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_host_mutualistic_count"] = region_out_info[region]["matching_host_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
-                region_out_info[region]["matching_endosym_mutualistic_count"] = region_out_info[region]["matching_endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                if use_interaction_values:
+                    # Host regional interaction value relationships
+                    region_out_info[region]["host_nearly_neutral_regional_prop"] = region_out_info[region]["host_nearly_neutral_count"] / num_hosts if num_hosts > 0 else 0
+                    region_out_info[region]["host_mutualistic_regional_prop"] = region_out_info[region]["host_mutualistic_count"] / num_hosts if num_hosts > 0 else 0
+                    region_out_info[region]["host_antagonistic_regional_prop"] = region_out_info[region]["host_antagonistic_count"] / num_hosts if num_hosts > 0 else 0
+                    # Endosymbiont regional interaction value relationships
+                    region_out_info[region]["endosym_nearly_neutral_regional_prop"] = region_out_info[region]["endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["endosym_mutualistic_regional_prop"] = region_out_info[region]["endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["endosym_antagonistic_regional_prop"] = region_out_info[region]["endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    # Task-matching pairs interaction value relationships
+                    region_out_info[region]["matching_host_antagonistic_count"] = region_out_info[region]["matching_host_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_antagonistic_count"] = region_out_info[region]["matching_endosym_antagonistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_host_nearly_neutral_count"] = region_out_info[region]["matching_host_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_nearly_neutral_count"] = region_out_info[region]["matching_endosym_nearly_neutral_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_host_mutualistic_count"] = region_out_info[region]["matching_host_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+                    region_out_info[region]["matching_endosym_mutualistic_count"] = region_out_info[region]["matching_endosym_mutualistic_count"] / num_endosyms if num_endosyms > 0 else 0
+
                 # Host-endosymbiont profile compatibility proportion in this region
                 region_out_info[region]["host_sym_task_profile_compatible_regional_prop"] = region_out_info[region]["host_sym_task_profile_compatible_count"] / num_endosyms if num_endosyms > 0 else 0
                 region_out_info[region]["host_sym_matching_parent_task_profile_regional_prop"] = region_out_info[region]["host_sym_matching_parent_task_profile_count"] / num_endosyms if num_endosyms > 0 else 0
@@ -827,7 +845,8 @@ def main():
         ########################################
         # Add summary info to summary content lines
         summary_content_lines.append(run_summary_info)
-        sym_interaction_values_content_lines.append(sym_int_vals_info)
+        if use_interaction_values:
+            sym_interaction_values_content_lines.append(sym_int_vals_info)
 
         ############################################################
         # Output time series data and task discovery data for this run
@@ -889,8 +908,9 @@ def main():
     # Write summary info out
     summary_path = os.path.join(dump_dir, "summary.csv")
     utils.write_csv(summary_path, summary_content_lines)
-    sym_int_path = os.path.join(dump_dir, "symbiont_interaction_values.csv")
-    utils.write_csv(sym_int_path, sym_interaction_values_content_lines)
+    if use_interaction_values:
+        sym_int_path = os.path.join(dump_dir, "symbiont_interaction_values.csv")
+        utils.write_csv(sym_int_path, sym_interaction_values_content_lines)
 
     # print incomplete runs
     print("Incomplete runs:")
