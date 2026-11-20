@@ -1,0 +1,21 @@
+#!/bin/bash --login
+########## Define Resources Needed with SBATCH Lines ##########
+
+#SBATCH --time=2:00:00          # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --mem=8G        # memory required per node - amount of memory (in bytes)
+#SBATCH --job-name agg         # you can give your job a name for easier identification (same as -J)
+#SBATCH --account devolab
+
+########## Command Lines to Run ##########
+
+# Variables for convenience
+EXP_NAME=2026-11-19-spatial-parasitism
+REPO_DIR=/mnt/home/lalejini/devo_ws/2026-gvsu-symbiosis-env-change/
+EXP_DIR=${REPO_DIR}/experiments/${EXP_NAME}/
+
+# Load correct environment variables, modules, etc.
+source ${REPO_DIR}/hpc-env/msu-hpc-env.sh
+source ${REPO_DIR}/pyenv/bin/activate
+
+cd ${EXP_DIR}/analysis
+./run-agg.sh > agg.log
