@@ -584,7 +584,7 @@ def main():
         ########################################
         # Spatial structure aggregation?
         ########################################
-        if aggregate_spatial_data:
+        if aggregate_spatial_data and run_finished_target:
             # Get spatial structure file name
             spatial_struct_path = pathlib.Path(run_params["SPATIAL_STRUCT_CFG_PATH"])
             spatial_struct_mode = run_params["SPATIAL_STRUCT_MODE"]
