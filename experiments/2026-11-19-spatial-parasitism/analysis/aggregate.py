@@ -81,7 +81,8 @@ sym_int_vals_fields_summary = {
 
 run_cfg_fields_time_series = {
     "SEED",
-    "VERTICAL_TRANSMISSION",
+    "START_MOI",
+    "HEALTH_TYPE",
     "SPATIAL_STRUCT_MODE",
     "SPATIAL_STRUCT_CFG_PATH"
 }
