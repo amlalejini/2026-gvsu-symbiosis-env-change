@@ -40,8 +40,8 @@ fixed_parameters = {
     "WORLD_WIDTH": "100",
     "WORLD_HEIGHT": "100",
     "INIT_POP_SIZE": "-1",
-    "HOST_AGE_MAX": "500",
-    "SYM_AGE_MAX": "500",
+    "HOST_AGE_MAX": "10000",
+    "SYM_AGE_MAX": "10000",
     # -- Output config ---
     "SPATIAL_DATA_OUTPUT": "1",
     "SPATIAL_DATA_INTERVAL": "200000",
